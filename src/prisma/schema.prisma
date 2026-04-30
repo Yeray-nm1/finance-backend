@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  password    String
+  createdAt   DateTime @default(now())
+
+  accounts    Account[]
+  transactions Transaction[]
+  budgets     Budget[]
+  subscriptions Subscription[]
+  notificationRules NotificationRule[]
+}
+
+model Account {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  type      String   // checking, savings
+  createdAt DateTime @default(now())
+
+  user        User @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  userId      String
+  accountId   String?
+  categoryId  String?
+
+  date        DateTime
+  amount      Float
+  description String
+  type        TransactionType
+  hash        String
+
+  createdAt   DateTime @default(now())
+
+  user        User @relation(fields: [userId], references: [id])
+  account     Account? @relation(fields: [accountId], references: [id])
+  category    Category? @relation(fields: [categoryId], references: [id])
+
+  @@unique([userId, hash])
+  @@index([userId, date])
+  @@index([userId, categoryId])
+  @@index([userId, amount])
+  @@index([description])
+}
+
+model Category {
+  id        String @id @default(uuid())
+  userId    String
+  name      String
+  type      CategoryType
+
+  transactions Transaction[]
+  budgets      Budget[]
+
+  @@index([userId])
+}
+
+model Budget {
+  id          String @id @default(uuid())
+  userId      String
+  categoryId  String
+  percentage  Float
+
+  createdAt   DateTime @default(now())
+
+  user        User @relation(fields: [userId], references: [id])
+  category    Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([userId, categoryId])
+  @@index([userId])
+}
+
+model Subscription {
+  id          String   @id @default(uuid())
+  userId      String
+
+  name        String
+  amount      Float
+  frequency   SubscriptionFrequency
+
+  confidence  Float // 0-1 (detección automática)
+  source      SubscriptionSource
+
+  createdAt   DateTime @default(now())
+
+  user        User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([name])
+}
+
+model NotificationRule {
+  id        String @id @default(uuid())
+  userId    String
+
+  type      String // budget_exceeded, subscription_due, etc.
+  threshold Float?
+  categoryId String?
+
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+enum TransactionType {
+  income
+  expense
+  transfer
+}
+
+enum CategoryType {
+  needs
+  leisure
+  savings
+  other
+}
+
+enum SubscriptionFrequency {
+  weekly
+  monthly
+  yearly
+}
+
+enum SubscriptionSource {
+  manual
+  detected
+}
