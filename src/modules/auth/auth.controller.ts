@@ -1,7 +1,8 @@
 import { Request, Response } from 'express'
 import { AuthService } from './auth.service'
-import { requireFields, requireField } from '../../middlewares/validate.middleware'
+import { requireField } from '../../middlewares/validate.middleware'
 import { BadRequestError } from '../../core/errors'
+import { config } from '../../config/env'
 
 export const AuthController = {
   async register(req: Request, res: Response) {
@@ -14,7 +15,14 @@ export const AuthController = {
 
     const result = await AuthService.register({ email, password })
 
-    res.status(201).json(result)
+    res.cookie('finance_token', result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    })
+
+    res.status(201).json({ user: result.user })
   },
 
   async login(req: Request, res: Response) {
@@ -23,6 +31,24 @@ export const AuthController = {
 
     const result = await AuthService.login({ email, password })
 
-    res.json(result)
+    res.cookie('finance_token', result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    })
+
+    res.json({ user: result.user })
+  },
+
+  async me(req: Request, res: Response) {
+    const userId = req.userId
+    const user = await AuthService.me(userId)
+    res.json({ user })
+  },
+
+  async logout(_req: Request, res: Response) {
+    res.clearCookie('finance_token')
+    res.json({ message: 'Logged out' })
   },
 }

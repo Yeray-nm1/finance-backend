@@ -58,4 +58,18 @@ export const AuthService = {
       token,
     }
   },
+
+  async me(userId: string) {
+    const user = await UserRepository.findById(userId)
+
+    if (!user) {
+      throw new BadRequestError('User not found')
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      createdAt: user.createdAt,
+    }
+  },
 }

@@ -12,13 +12,20 @@ declare global {
 }
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization
+  let token: string | undefined
 
-  if (!header || !header.startsWith('Bearer ')) {
-    throw new UnauthorizedError('Missing or invalid authorization header')
+  const authHeader = req.headers.authorization
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1]
   }
 
-  const token = header.split(' ')[1]
+  if (!token && req.cookies) {
+    token = req.cookies.finance_token
+  }
+
+  if (!token) {
+    throw new UnauthorizedError('Missing or invalid authorization token')
+  }
 
   try {
     const decoded = jwt.verify(token, config.jwtSecret) as { userId: string }
