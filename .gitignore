@@ -4,6 +4,5 @@ dist/
 .env
 .env.*
 !.env.example
-pnpm-lock.yaml
 docs/
 src/prisma/migrations/
