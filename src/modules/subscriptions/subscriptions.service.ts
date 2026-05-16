@@ -2,14 +2,7 @@ import { SubscriptionRepository, CreateSubscriptionDTO } from './subscriptions.r
 import { TransactionRepository } from '../transactions/transactions.repository'
 import { NotFoundError } from '../../core/errors'
 import { normalizeDescription } from '../../utils/normalize'
-
-type TransactionGroup = {
-  name: string
-  transactions: Array<{ date: Date; amount: number }>
-  avgAmount: number
-  count: number
-  avgDaysBetween: number
-}
+import type { Transaction } from '@prisma/client'
 
 function detectFrequency(avgDays: number): 'weekly' | 'monthly' | 'yearly' | null {
   if (avgDays >= 4 && avgDays <= 10) return 'weekly'
@@ -74,12 +67,12 @@ export const SubscriptionService = {
     for (const [name, transactions] of Object.entries(groups)) {
       if (transactions.length < 2) continue
 
-      const amounts = transactions.map((t: { date: Date; amount: number }) => Math.abs(t.amount))
-      const avgAmount = amounts.reduce((sum: number, a: number) => sum + a, 0) / amounts.length
-      const amountVariance = amounts.reduce((sum: number, a: number) => sum + Math.pow(a - avgAmount, 2), 0) / amounts.length
+      const amounts = transactions.map((t) => Math.abs(t.amount))
+      const avgAmount = amounts.reduce((sum, a) => sum + a, 0) / amounts.length
+      const amountVariance = amounts.reduce((sum, a) => sum + Math.pow(a - avgAmount, 2), 0) / amounts.length
       const amountConsistency = 1 - Math.min(amountVariance / (avgAmount * avgAmount), 1)
 
-      const dates = transactions.map((t: { date: Date; amount: number }) => new Date(t.date))
+      const dates = transactions.map((t) => new Date(t.date))
       const avgDays = calculateAvgDaysBetween(dates)
       const frequency = detectFrequency(avgDays)
 

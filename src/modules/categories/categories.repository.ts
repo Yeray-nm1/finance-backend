@@ -7,10 +7,36 @@ export type CreateCategoryDTO = {
   type: CategoryType
 }
 
+type QueryOpts = {
+  search?: string
+  page?: number
+  limit?: number
+}
+
 export const CategoryRepository = {
-  async findAll(userId: string) {
+  async findAll(userId: string, opts: QueryOpts = {}) {
+    const where: Record<string, unknown> = { userId }
+
+    if (opts.search) {
+      where.name = { contains: opts.search, mode: 'insensitive' }
+    }
+
+    if (opts.page && opts.limit) {
+      const skip = (opts.page - 1) * opts.limit
+      const [items, total] = await Promise.all([
+        prisma.category.findMany({
+          where,
+          orderBy: { name: 'asc' },
+          skip,
+          take: opts.limit,
+        }),
+        prisma.category.count({ where }),
+      ])
+      return { items, total, page: opts.page, limit: opts.limit }
+    }
+
     return prisma.category.findMany({
-      where: { userId },
+      where,
       orderBy: { name: 'asc' },
     })
   },

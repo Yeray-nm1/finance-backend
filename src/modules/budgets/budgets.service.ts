@@ -1,37 +1,48 @@
-import { BudgetRepository, CreateBudgetDTO } from './budgets.repository'
-import { NotFoundError, ConflictError } from '../../core/errors'
+import { BudgetRepository } from './budgets.repository'
+import { NotFoundError, BadRequestError } from '../../core/errors'
 
 export const BudgetService = {
-  async getAll(userId: string) {
-    return BudgetRepository.findAll(userId)
+  async list(userId: string, month?: number, year?: number) {
+    const now = new Date()
+    const m = month ?? now.getMonth() + 1
+    const y = year ?? now.getFullYear()
+    return BudgetRepository.findByPeriod(userId, m, y)
   },
 
-  async getById(userId: string, id: string) {
-    const budget = await BudgetRepository.findById(userId, id)
-    if (!budget) {
-      throw new NotFoundError('Budget')
+  async create(userId: string, categoryId: string, percentage: number) {
+    if (!percentage || percentage <= 0 || percentage > 100) {
+      throw new BadRequestError('El porcentaje debe ser mayor que 0 y menor o igual que 100')
     }
-    return budget
-  },
 
-  async create(userId: string, dto: CreateBudgetDTO) {
-    try {
-      return await BudgetRepository.create(userId, dto)
-    } catch (err: any) {
-      if (err.code === 'P2002') {
-        throw new ConflictError('Budget already exists for this category')
-      }
-      throw err
+    const now = new Date()
+    const month = now.getMonth() + 1
+    const year = now.getFullYear()
+
+    const exists = await BudgetRepository.exists(userId, categoryId, month, year)
+    if (exists) {
+      throw new BadRequestError('Ya existe un presupuesto para esta categoría este mes')
     }
+
+    return BudgetRepository.create(userId, categoryId, percentage, month, year)
   },
 
-  async update(userId: string, id: string, dto: Partial<CreateBudgetDTO>) {
-    await BudgetService.getById(userId, id)
-    return BudgetRepository.update(userId, id, dto)
+  async update(userId: string, id: string, data: { categoryId?: string; percentage?: number }) {
+    if (data.percentage !== undefined && (data.percentage <= 0 || data.percentage > 100)) {
+      throw new BadRequestError('El porcentaje debe ser mayor que 0 y menor o igual que 100')
+    }
+
+    const result = await BudgetRepository.update(userId, id, data)
+    if (!result) {
+      throw new NotFoundError('Presupuesto')
+    }
+    return result
   },
 
   async delete(userId: string, id: string) {
-    await BudgetService.getById(userId, id)
-    return BudgetRepository.delete(userId, id)
+    const result = await BudgetRepository.delete(userId, id)
+    if (!result) {
+      throw new NotFoundError('Presupuesto')
+    }
+    return result
   },
 }

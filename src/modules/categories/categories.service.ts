@@ -1,9 +1,15 @@
 import { CategoryRepository, CreateCategoryDTO } from './categories.repository'
 import { NotFoundError } from '../../core/errors'
 
+type QueryOpts = {
+  search?: string
+  page?: number
+  limit?: number
+}
+
 export const CategoryService = {
-  async getAll(userId: string) {
-    return CategoryRepository.findAll(userId)
+  async getAll(userId: string, opts: QueryOpts = {}) {
+    return CategoryRepository.findAll(userId, opts)
   },
 
   async getById(userId: string, id: string) {

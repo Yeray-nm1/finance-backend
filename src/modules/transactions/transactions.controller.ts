@@ -40,4 +40,27 @@ export const TransactionController = {
     const result = await TransactionService.importMany(req.userId, rows)
     res.status(201).json(result)
   },
+
+  async delete(req: Request, res: Response) {
+    await TransactionService.delete(req.userId, req.params.id as string)
+    res.status(204).send()
+  },
+
+  async deleteMany(req: Request, res: Response) {
+    const ids = req.query.ids as string | undefined
+    if (!ids) {
+      throw new BadRequestError('ids query parameter is required (comma-separated)')
+    }
+    const idArray = ids.split(',').map(s => s.trim()).filter(Boolean)
+    if (idArray.length === 0) {
+      throw new BadRequestError('ids must be a non-empty comma-separated list')
+    }
+    const result = await TransactionService.deleteMany(req.userId, idArray)
+    res.json({ deleted: result.count })
+  },
+
+  async deleteAllImported(req: Request, res: Response) {
+    const result = await TransactionService.deleteAllImported(req.userId)
+    res.json({ deleted: result.count })
+  },
 }

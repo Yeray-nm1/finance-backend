@@ -28,6 +28,8 @@ model Account {
 
   user        User @relation(fields: [userId], references: [id])
   transactions Transaction[]
+
+  @@index([userId])
 }
 
 model Transaction {
@@ -41,6 +43,7 @@ model Transaction {
   description String
   type        TransactionType
   hash        String
+  source      String   @default("manual")
 
   createdAt   DateTime @default(now())
 
@@ -61,25 +64,27 @@ model Category {
   name      String
   type      CategoryType
 
-  transactions Transaction[]
-  budgets      Budget[]
+  transactions    Transaction[]
+  budgets         Budget[]
 
   @@index([userId])
 }
 
 model Budget {
-  id          String @id @default(uuid())
-  userId      String
-  categoryId  String
-  percentage  Float
+  id         String   @id @default(uuid())
+  userId     String
+  categoryId String
+  percentage Float
+  month      Int
+  year       Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  createdAt   DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
 
-  user        User @relation(fields: [userId], references: [id])
-  category    Category @relation(fields: [categoryId], references: [id])
-
-  @@unique([userId, categoryId])
-  @@index([userId])
+  @@unique([userId, categoryId, month, year])
+  @@index([userId, month, year])
 }
 
 model Subscription {
