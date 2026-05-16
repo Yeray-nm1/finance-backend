@@ -4,7 +4,10 @@ import { requireFields, requireEnum } from '../../middlewares/validate.middlewar
 
 export const CategoryController = {
   async getAll(req: Request, res: Response) {
-    const categories = await CategoryService.getAll(req.userId)
+    const search = req.query.search as string | undefined
+    const page = req.query.page ? parseInt(req.query.page as string, 10) : undefined
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined
+    const categories = await CategoryService.getAll(req.userId, { search, page, limit })
     res.json(categories)
   },
 

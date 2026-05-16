@@ -47,11 +47,15 @@ export const TransactionController = {
   },
 
   async deleteMany(req: Request, res: Response) {
-    const ids = requireField<string[]>(req.body, 'ids')
-    if (!Array.isArray(ids) || ids.length === 0) {
-      throw new BadRequestError('ids must be a non-empty array')
+    const ids = req.query.ids as string | undefined
+    if (!ids) {
+      throw new BadRequestError('ids query parameter is required (comma-separated)')
     }
-    const result = await TransactionService.deleteMany(req.userId, ids)
+    const idArray = ids.split(',').map(s => s.trim()).filter(Boolean)
+    if (idArray.length === 0) {
+      throw new BadRequestError('ids must be a non-empty comma-separated list')
+    }
+    const result = await TransactionService.deleteMany(req.userId, idArray)
     res.json({ deleted: result.count })
   },
 

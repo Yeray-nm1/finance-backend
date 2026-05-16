@@ -129,9 +129,8 @@ export const TransactionRepository = {
   },
 
   async deleteAllImported(userId: string) {
-    // Elimina todas las transacciones que fueron importadas (tienen hash)
     return prisma.transaction.deleteMany({
-      where: { userId, hash: { not: '' } }
+      where: { userId, source: 'import' }
     })
   },
 }

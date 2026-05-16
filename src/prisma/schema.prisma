@@ -28,6 +28,8 @@ model Account {
 
   user        User @relation(fields: [userId], references: [id])
   transactions Transaction[]
+
+  @@index([userId])
 }
 
 model Transaction {
@@ -41,6 +43,7 @@ model Transaction {
   description String
   type        TransactionType
   hash        String
+  source      String   @default("manual")
 
   createdAt   DateTime @default(now())
 

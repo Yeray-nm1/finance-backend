@@ -1,4 +1,5 @@
 import { prisma } from '../../core/db'
+import { Transaction, Budget, Subscription } from '@prisma/client'
 import { normalizeDescription } from '../../utils/normalize'
 
 type SubscriptionFrequency = 'weekly' | 'monthly' | 'yearly'
@@ -10,6 +11,10 @@ function detectFrequencyName(avgDays: number): SubscriptionFrequency | null {
   return null
 }
 
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
 export const DashboardService = {
   async getMonthOverview(userId: string, year: number, month: number) {
     const start = new Date(year, month - 1, 1)
@@ -18,37 +23,30 @@ export const DashboardService = {
     const transactions = await prisma.transaction.findMany({
       where: {
         userId,
-        date: {
-          gte: start,
-          lt: end,
-        },
+        date: { gte: start, lt: end },
       },
-      include: {
-        category: true,
-      },
+      include: { category: true },
     })
 
-    const income = transactions
-      .filter((t: any) => t.type === 'income')
-      .reduce((sum: number, t: any) => sum + t.amount, 0)
+    let income = 0
+    let expenses = 0
+    let savings = 0
 
-    const expenses = transactions
-      .filter((t: any) => t.type === 'expense')
-      .reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0)
-
-    const savings = transactions
-      .filter((t: any) => t.type === 'transfer')
-      .reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0)
+    for (const t of transactions) {
+      if (t.type === 'income') income += t.amount
+      else if (t.type === 'expense') expenses += Math.abs(t.amount)
+      else if (t.type === 'transfer') savings += Math.abs(t.amount)
+    }
 
     const available = income - expenses - savings
     const balance = income - expenses
 
     return {
-      income: Math.round(income * 100) / 100,
-      expenses: Math.round(expenses * 100) / 100,
-      savings: Math.round(savings * 100) / 100,
-      available: Math.round(available * 100) / 100,
-      balance: Math.round(balance * 100) / 100,
+      income: round2(income),
+      expenses: round2(expenses),
+      savings: round2(savings),
+      available: round2(available),
+      balance: round2(balance),
     }
   },
 
@@ -82,7 +80,7 @@ export const DashboardService = {
       }
     }
 
-    return budgets.map((b: any) => {
+    return budgets.map((b) => {
       const spent = spentByCategory[b.categoryId] ?? 0
       const budgeted = income * (b.percentage / 100)
       const progress = budgeted > 0 ? (spent / budgeted) * 100 : 0
@@ -91,9 +89,9 @@ export const DashboardService = {
       return {
         category: b.category.name,
         percentage: b.percentage,
-        spent: Math.round(spent * 100) / 100,
-        budgeted: Math.round(budgeted * 100) / 100,
-        progress: Math.round(progress * 100) / 100,
+        spent: round2(spent),
+        budgeted: round2(budgeted),
+        progress: round2(progress),
         status,
       }
     })
@@ -109,7 +107,7 @@ export const DashboardService = {
     if (previousBalance.balance === 0) return undefined
 
     const change = ((currentBalance.balance - previousBalance.balance) / Math.abs(previousBalance.balance)) * 100
-    return Math.round(change * 100) / 100
+    return round2(change)
   },
 
   async getRecurring(userId: string) {
@@ -160,25 +158,26 @@ export const DashboardService = {
       const variance = amounts.reduce((sum, a) => sum + Math.pow(a - avgAmount, 2), 0) / amounts.length
       const isVariable = variance / (avgAmount * avgAmount) > 0.1
 
-      const existingManual = subscriptions.find((s: any) => normalizeDescription(s.name) === name)
-
+      const existingManual = subscriptions.find((s) => normalizeDescription(s.name) === name)
       if (existingManual) continue
 
       detected.push({
         name,
-        amount: Math.round(avgAmount * 100) / 100,
+        amount: round2(avgAmount),
         frequency: freq,
         status: isVariable ? 'variable' : 'stable',
       })
     }
 
     return {
-      manual: subscriptions.filter((s: any) => s.source === 'manual').map((s: any) => ({
-        name: s.name,
-        amount: s.amount,
-        frequency: s.frequency,
-        status: 'paid',
-      })),
+      manual: subscriptions
+        .filter((s) => s.source === 'manual')
+        .map((s) => ({
+          name: s.name,
+          amount: s.amount,
+          frequency: s.frequency,
+          status: 'paid' as const,
+        })),
       detected,
     }
   },
@@ -194,14 +193,14 @@ export const DashboardService = {
       },
     })
 
-    return transactions.map((t: any) => ({
+    return transactions.map((t) => ({
       id: t.id,
       date: t.date,
       amount: t.amount,
       description: t.description,
       type: t.type,
-      category: t.category?.name || null,
-      account: t.account?.name || null,
+      category: t.category?.name ?? null,
+      account: t.account?.name ?? null,
     }))
   },
 

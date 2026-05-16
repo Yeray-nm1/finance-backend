@@ -1,10 +1,13 @@
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
 import morgan from 'morgan'
 import cookieParser from 'cookie-parser'
+import rateLimit from 'express-rate-limit'
 
 import { errorMiddleware } from './middlewares/error.middleware'
 import { authMiddleware } from './middlewares/auth.middleware'
+import { config } from './config/env'
 
 import authRoutes from './modules/auth/auth.routes'
 import accountRoutes from './modules/accounts/accounts.routes'
@@ -16,15 +19,34 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes'
 
 const app = express()
 
+app.use(helmet())
+
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas peticiones. Intenta de nuevo en un minuto.' },
+})
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos. Intenta de nuevo en 15 minutos.' },
+})
+
+app.use(globalLimiter)
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3001',
-  credentials: true
+  origin: config.frontendUrl,
+  credentials: true,
 }))
 app.use(express.json())
 app.use(cookieParser())
 app.use(morgan('dev'))
 
-app.use('/api/v1/auth', authRoutes)
+app.use('/api/v1/auth', authLimiter, authRoutes)
 
 app.use(authMiddleware)
 
