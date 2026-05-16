@@ -112,4 +112,26 @@ export const TransactionRepository = {
 
     return groups
   },
+
+  async delete(userId: string, id: string) {
+    return prisma.transaction.deleteMany({
+      where: { id, userId }
+    })
+  },
+
+  async deleteMany(userId: string, ids: string[]) {
+    return prisma.transaction.deleteMany({
+      where: { 
+        userId,
+        id: { in: ids }
+      }
+    })
+  },
+
+  async deleteAllImported(userId: string) {
+    // Elimina todas las transacciones que fueron importadas (tienen hash)
+    return prisma.transaction.deleteMany({
+      where: { userId, hash: { not: '' } }
+    })
+  },
 }

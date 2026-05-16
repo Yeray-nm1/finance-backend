@@ -1,56 +1,65 @@
 import { prisma } from '../../core/db'
 
-export type CreateBudgetDTO = {
-  categoryId: string
-  percentage: number
-}
-
 export const BudgetRepository = {
-  async findAll(userId: string) {
+  async findByPeriod(userId: string, month: number, year: number) {
     return prisma.budget.findMany({
-      where: { userId },
-      include: {
-        category: true,
-      },
-      orderBy: { createdAt: 'desc' },
+      where: { userId, month, year },
+      include: { category: true },
+      orderBy: { category: { name: 'asc' } },
     })
   },
 
   async findById(userId: string, id: string) {
     return prisma.budget.findFirst({
       where: { id, userId },
-      include: {
-        category: true,
-      },
+      include: { category: true },
     })
   },
 
-  async create(userId: string, dto: CreateBudgetDTO) {
+  async create(userId: string, categoryId: string, percentage: number, month: number, year: number) {
     return prisma.budget.create({
-      data: {
-        userId,
-        categoryId: dto.categoryId,
-        percentage: dto.percentage,
-      },
-      include: {
-        category: true,
-      },
+      data: { userId, categoryId, percentage, month, year },
+      include: { category: true },
     })
   },
 
-  async update(userId: string, id: string, dto: Partial<CreateBudgetDTO>) {
+  async update(userId: string, id: string, data: { categoryId?: string; percentage?: number }) {
+    const budget = await prisma.budget.findFirst({ where: { id, userId } })
+    if (!budget) return null
+
     return prisma.budget.update({
-      where: { id, userId },
-      data: dto,
-      include: {
-        category: true,
-      },
+      where: { id },
+      data,
+      include: { category: true },
     })
   },
 
   async delete(userId: string, id: string) {
-    return prisma.budget.delete({
-      where: { id, userId },
+    const budget = await prisma.budget.findFirst({ where: { id, userId } })
+    if (!budget) return null
+
+    return prisma.budget.delete({ where: { id } })
+  },
+
+  async exists(userId: string, categoryId: string, month: number, year: number) {
+    const found = await prisma.budget.findUnique({
+      where: { userId_categoryId_month_year: { userId, categoryId, month, year } },
     })
+    return !!found
+  },
+
+  async calculateIncome(userId: string, month: number, year: number) {
+    const start = new Date(year, month - 1, 1)
+    const end = new Date(year, month, 1)
+
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        userId,
+        type: 'income',
+        date: { gte: start, lt: end },
+      },
+    })
+
+    return transactions.reduce((sum, tx) => sum + tx.amount, 0)
   },
 }

@@ -1,6 +1,8 @@
 import { TransactionRepository, CreateTransactionDTO } from './transactions.repository'
 import { NotFoundError, BadRequestError } from '../../core/errors'
 import { createTransactionHash } from '../../utils/hash'
+import { detectCategory } from '../../utils/categorization'
+import { prisma } from '../../core/db'
 
 export const TransactionService = {
   async getAll(userId: string) {
@@ -15,8 +17,34 @@ export const TransactionService = {
     return tx
   },
 
+  async delete(userId: string, id: string) {
+    const tx = await TransactionRepository.findById(userId, id)
+    if (!tx) {
+      throw new NotFoundError('Transaction')
+    }
+    return TransactionRepository.delete(userId, id)
+  },
+
+  async deleteMany(userId: string, ids: string[]) {
+    return TransactionRepository.deleteMany(userId, ids)
+  },
+
+  async deleteAllImported(userId: string) {
+    return TransactionRepository.deleteAllImported(userId)
+  },
+
   async create(userId: string, dto: CreateTransactionDTO) {
     const hash = createTransactionHash(dto.date, dto.amount, dto.description)
+
+    // Si no se proporciona categoryId, intentar detectarla automáticamente
+    let categoryId = dto.categoryId || null;
+    if (!categoryId && dto.type === 'expense') {
+      const categories = await prisma.category.findMany({ where: { userId } });
+      const detectedId = detectCategory(dto.description, categories);
+      if (detectedId) {
+        categoryId = detectedId;
+      }
+    }
 
     return TransactionRepository.create({
       userId,
@@ -25,7 +53,7 @@ export const TransactionService = {
       description: dto.description,
       type: dto.type,
       accountId: dto.accountId || null,
-      categoryId: dto.categoryId || null,
+      categoryId,
       hash,
     })
   },

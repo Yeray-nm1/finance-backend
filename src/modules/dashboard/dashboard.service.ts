@@ -52,48 +52,64 @@ export const DashboardService = {
     }
   },
 
-  async getBudgetDeviations(userId: string, year: number, month: number) {
+  async getBudgetBudgets(userId: string, year: number, month: number) {
     const start = new Date(year, month - 1, 1)
     const end = new Date(year, month, 1)
 
     const budgets = await prisma.budget.findMany({
-      where: { userId },
+      where: { userId, month, year },
       include: { category: true },
     })
 
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        userId,
-        type: 'expense',
-        date: { gte: start, lt: end },
-      },
+    if (budgets.length === 0) return []
+
+    const totalIncome = await prisma.transaction.aggregate({
+      where: { userId, type: 'income', date: { gte: start, lt: end } },
+      _sum: { amount: true },
     })
 
-    const spendingByCategory: Record<string, number> = {}
+    const income = totalIncome._sum.amount ?? 0
 
-    for (const tx of transactions) {
+    const expenseTx = await prisma.transaction.findMany({
+      where: { userId, type: 'expense', date: { gte: start, lt: end } },
+      select: { categoryId: true, amount: true },
+    })
+
+    const spentByCategory: Record<string, number> = {}
+    for (const tx of expenseTx) {
       if (tx.categoryId) {
-        spendingByCategory[tx.categoryId] = (spendingByCategory[tx.categoryId] || 0) + Math.abs(tx.amount)
+        spentByCategory[tx.categoryId] = (spentByCategory[tx.categoryId] ?? 0) + Math.abs(tx.amount)
       }
     }
 
-    const deviations = budgets.map((budget: any) => {
-      const spent = spendingByCategory[budget.categoryId] || 0
-      const budgetAmount = (budget.percentage / 100) *
-        transactions.reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0)
-      const progress = budgetAmount > 0 ? (spent / budgetAmount) * 100 : 0
+    return budgets.map((b: any) => {
+      const spent = spentByCategory[b.categoryId] ?? 0
+      const budgeted = income * (b.percentage / 100)
+      const progress = budgeted > 0 ? (spent / budgeted) * 100 : 0
+      const status = progress > 100 ? 'over' : progress > 80 ? 'warning' : 'ok'
 
       return {
-        category: budget.category.name,
-        percentage: budget.percentage,
+        category: b.category.name,
+        percentage: b.percentage,
         spent: Math.round(spent * 100) / 100,
-        budgeted: Math.round(budgetAmount * 100) / 100,
+        budgeted: Math.round(budgeted * 100) / 100,
         progress: Math.round(progress * 100) / 100,
-        status: progress > 100 ? 'over' : progress > 80 ? 'warning' : 'ok',
+        status,
       }
     })
+  },
 
-    return deviations
+  async getVsPreviousMonth(userId: string, year: number, month: number) {
+    const prevMonth = month === 1 ? 12 : month - 1
+    const prevYear = month === 1 ? year - 1 : year
+
+    const currentBalance = await this.getMonthOverview(userId, year, month)
+    const previousBalance = await this.getMonthOverview(userId, prevYear, prevMonth)
+
+    if (previousBalance.balance === 0) return undefined
+
+    const change = ((currentBalance.balance - previousBalance.balance) / Math.abs(previousBalance.balance)) * 100
+    return Math.round(change * 100) / 100
   },
 
   async getRecurring(userId: string) {
@@ -190,15 +206,16 @@ export const DashboardService = {
   },
 
   async getDashboard(userId: string, year: number, month: number) {
-    const [balance, budgets, recurring, transactions] = await Promise.all([
+    const [balance, budgets, recurring, transactions, vsPreviousMonth] = await Promise.all([
       DashboardService.getMonthOverview(userId, year, month),
-      DashboardService.getBudgetDeviations(userId, year, month),
+      DashboardService.getBudgetBudgets(userId, year, month),
       DashboardService.getRecurring(userId),
       DashboardService.getRecentTransactions(userId),
+      DashboardService.getVsPreviousMonth(userId, year, month),
     ])
 
     return {
-      balance,
+      balance: { ...balance, ...(vsPreviousMonth !== undefined ? { vsPreviousMonth } : {}) },
       budgets,
       recurring,
       transactions,
