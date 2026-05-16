@@ -60,6 +60,6 @@ export const BudgetRepository = {
       },
     })
 
-    return transactions.reduce((sum, tx) => sum + tx.amount, 0)
+    return transactions.reduce((sum: number, tx: { amount: number }) => sum + tx.amount, 0)
   },
 }
