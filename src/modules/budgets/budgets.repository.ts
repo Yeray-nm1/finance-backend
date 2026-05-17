@@ -41,6 +41,23 @@ export const BudgetRepository = {
     return prisma.budget.delete({ where: { id } })
   },
 
+  async findMonthly(userId: string, month: number, year: number) {
+    return prisma.monthlyBudget.findUnique({
+      where: { userId_month_year: { userId, month, year } },
+    })
+  },
+
+  async upsertMonthly(
+    userId: string, month: number, year: number,
+    totalIncome: number, typeAllocations: unknown,
+  ) {
+    return prisma.monthlyBudget.upsert({
+      where: { userId_month_year: { userId, month, year } },
+      create: { userId, month, year, totalIncome, typeAllocations: typeAllocations as any },
+      update: { totalIncome, typeAllocations: typeAllocations as any },
+    })
+  },
+
   async exists(userId: string, categoryId: string, month: number, year: number) {
     const found = await prisma.budget.findUnique({
       where: { userId_categoryId_month_year: { userId, categoryId, month, year } },
@@ -48,18 +65,16 @@ export const BudgetRepository = {
     return !!found
   },
 
-  async calculateIncome(userId: string, month: number, year: number) {
+  async findIncomeByPeriod(userId: string, month: number, year: number) {
     const start = new Date(year, month - 1, 1)
     const end = new Date(year, month, 1)
-
-    const transactions = await prisma.transaction.findMany({
+    return prisma.transaction.findMany({
       where: {
         userId,
         type: 'income',
         date: { gte: start, lt: end },
       },
+      orderBy: { amount: 'desc' },
     })
-
-    return transactions.reduce((sum: number, tx: { amount: number }) => sum + tx.amount, 0)
   },
 }

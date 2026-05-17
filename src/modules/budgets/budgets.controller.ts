@@ -31,4 +31,48 @@ export const BudgetController = {
     await BudgetService.delete(req.userId, req.params.id as string)
     res.status(204).send()
   },
+
+  async getMonthly(req: Request, res: Response) {
+    const month = parseInt(req.query.month as string, 10)
+    const year = parseInt(req.query.year as string, 10)
+
+    if (!month || !year || isNaN(month) || isNaN(year)) {
+      res.status(400).json({ error: 'month and year are required' })
+      return
+    }
+
+    const budget = await BudgetService.getMonthly(req.userId, month, year)
+    if (!budget) {
+      res.status(404).json(null)
+      return
+    }
+    res.json(budget)
+  },
+
+  async upsertMonthly(req: Request, res: Response) {
+    const month = parseInt(req.query.month as string, 10)
+    const year = parseInt(req.query.year as string, 10)
+
+    if (!month || !year || isNaN(month) || isNaN(year)) {
+      res.status(400).json({ error: 'month and year are required' })
+      return
+    }
+
+    const { totalIncome, typeAllocations } = req.body
+    const budget = await BudgetService.upsertMonthly(req.userId, month, year, totalIncome, typeAllocations)
+    res.json(budget)
+  },
+
+  async calculateIncome(req: Request, res: Response) {
+    const month = req.query.month ? parseInt(req.query.month as string, 10) : undefined
+    const year = req.query.year ? parseInt(req.query.year as string, 10) : undefined
+    
+    if ((month === undefined) !== (year === undefined)) {
+      res.status(400).json({ error: 'Both month and year must be provided together' })
+      return
+    }
+    
+    const result = await BudgetService.calculateIncome(req.userId, month, year)
+    res.json(result)
+  },
 }
