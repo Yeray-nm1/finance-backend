@@ -1,4 +1,5 @@
 import { prisma } from '../../core/db'
+import { Prisma } from '@prisma/client'
 
 export type TransactionType = 'income' | 'expense' | 'transfer'
 
@@ -11,16 +12,66 @@ export type CreateTransactionDTO = {
   categoryId?: string
 }
 
+export type TransactionFilters = {
+  page?: number
+  limit?: number
+  type?: string
+  categoryId?: string
+  accountId?: string
+  dateFrom?: string
+  dateTo?: string
+  search?: string
+  sortBy?: string
+  sortOrder?: string
+}
+
 export const TransactionRepository = {
-  async findAll(userId: string) {
-    return prisma.transaction.findMany({
-      where: { userId },
-      orderBy: { date: 'desc' },
-      include: {
-        account: true,
-        category: true,
-      },
-    })
+  async findWithFilters(userId: string, filters: TransactionFilters) {
+    const page = Math.max(1, filters.page ?? 1)
+    const limit = Math.min(100, Math.max(1, filters.limit ?? 50))
+    const skip = (page - 1) * limit
+    const sortBy = filters.sortBy ?? 'date'
+    const sortOrder = filters.sortOrder ?? 'desc'
+
+    const where: Prisma.TransactionWhereInput = { userId }
+
+    if (filters.type) {
+      where.type = filters.type as TransactionType
+    }
+    if (filters.categoryId) {
+      where.categoryId = filters.categoryId
+    }
+    if (filters.accountId) {
+      where.accountId = filters.accountId
+    }
+    if (filters.search) {
+      where.description = {
+        contains: filters.search,
+        mode: 'insensitive',
+      }
+    }
+    if (filters.dateFrom || filters.dateTo) {
+      where.date = {}
+      if (filters.dateFrom) {
+        where.date.gte = new Date(filters.dateFrom)
+      }
+      if (filters.dateTo) {
+        where.date.lte = new Date(filters.dateTo)
+      }
+    }
+
+    const [data, total] = await Promise.all([
+      prisma.transaction.findMany({
+        where,
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take: limit,
+        include: { account: true, category: true },
+      }),
+      prisma.transaction.count({ where }),
+    ])
+
+    return { data, total }
   },
 
   async findById(userId: string, id: string) {
@@ -132,5 +183,22 @@ export const TransactionRepository = {
     return prisma.transaction.deleteMany({
       where: { userId, source: 'import' }
     })
+  },
+
+  async update(userId: string, id: string, data: Partial<{
+    date: Date
+    amount: number
+    description: string
+    type: TransactionType
+    accountId: string | null
+    categoryId: string | null
+    hash: string
+  }>) {
+    const tx = await prisma.transaction.updateMany({
+      where: { id, userId },
+      data,
+    })
+    if (tx.count === 0) return null
+    return this.findById(userId, id)
   },
 }
