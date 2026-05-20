@@ -1,8 +1,6 @@
 import { TransactionRepository, CreateTransactionDTO, TransactionFilters } from './transactions.repository'
 import { NotFoundError, BadRequestError } from '../../core/errors'
 import { createTransactionHash } from '../../utils/hash'
-import { detectCategory } from '../../utils/categorization'
-import { prisma } from '../../core/db'
 
 export type UpdateTransactionDTO = {
   description?: string
@@ -45,16 +43,6 @@ export const TransactionService = {
   async create(userId: string, dto: CreateTransactionDTO) {
     const hash = createTransactionHash(dto.date, dto.amount, dto.description)
 
-    // Si no se proporciona categoryId, intentar detectarla automáticamente
-    let categoryId = dto.categoryId || null;
-    if (!categoryId && dto.type === 'expense') {
-      const categories = await prisma.category.findMany({ where: { userId } });
-      const detectedId = detectCategory(dto.description, categories);
-      if (detectedId) {
-        categoryId = detectedId;
-      }
-    }
-
     return TransactionRepository.create({
       userId,
       date: new Date(dto.date),
@@ -62,7 +50,7 @@ export const TransactionService = {
       description: dto.description,
       type: dto.type,
       accountId: dto.accountId || null,
-      categoryId,
+      categoryId: dto.categoryId || null,
       hash,
     })
   },
@@ -90,15 +78,6 @@ export const TransactionService = {
       const newAmount = dto.amount ?? existing.amount
       const newDesc = dto.description ?? existing.description
       data.hash = createTransactionHash(newDate, newAmount, newDesc)
-    }
-
-    if (dto.type === 'expense' && dto.categoryId === undefined) {
-      const targetDesc = dto.description ?? existing.description
-      const categories = await prisma.category.findMany({ where: { userId } })
-      const detectedId = detectCategory(targetDesc, categories)
-      if (detectedId) {
-        data.categoryId = detectedId
-      }
     }
 
     const updated = await TransactionRepository.update(userId, id, data as Parameters<typeof TransactionRepository.update>[2])
