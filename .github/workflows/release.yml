@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Detect bump type from PR label
+        id: label
+        run: |
+          labels='${{ toJSON(github.event.pull_request.labels.*.name) }}'
+          case "$labels" in
+            *major*) echo "bump=major" >> "$GITHUB_OUTPUT" ;;
+            *minor*) echo "bump=minor" >> "$GITHUB_OUTPUT" ;;
+            *)       echo "bump=patch" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - uses: Yeray-nm1/version-orchestrator@main
+        with:
+          bump: ${{ steps.label.outputs.bump }}
