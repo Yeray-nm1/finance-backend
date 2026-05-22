@@ -1,0 +1,19 @@
+## [1.0.0] - 2026-05-22
+
+- d0755e4 Merge pull request #8 from Yeray-nm1/feature/ynm-7-add-release-workflow
+- 14123a3 #7 Add release workflow caller
+- 77b995c #7 Update project version for feature branch
+- 49628a5 Merge pull request #5 from Yeray-nm1/feature/ynm-4-transaction-pagination-filtering-edition
+- b2392ee refactor: remove auto-categorization from transaction service
+- 601119f added: pagination, filtering, order and transaction edition
+- 469f86e #4 Update project version for feature branch
+- 65b40b1 Merge pull request #3 from Yeray-nm1/feature/ynm-2-calculate-income-button
+- 1c0f0c1 added endpoint to manage monthly budget
+- 42c63cc Merge pull request #2 from Yeray-nm1/feature/ynm-1-refactor-monthly-budget
+- 9eddf08 code quality cleanup: helmet, rate limit, zod env validation, password policy, Prisma migration (source field), remove any types, pagination, REST convention, dead code, seed
+- 8586659 fix: add prisma generate to build script and fix implicit any types
+- efe21ce fix: add pnpm-lock.yaml to version control for CI
+- f1692b4 alignment with frontend budget workflow
+- 270f6bd added cookies based auth
+- 700f5f9 first approach
+
