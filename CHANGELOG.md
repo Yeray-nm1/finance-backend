@@ -1,4 +1,4 @@
-## [1.0.0] - 2026-05-22
+## [1.1.0] - 2026-05-22
 
 - d0755e4 Merge pull request #8 from Yeray-nm1/feature/ynm-7-add-release-workflow
 - 14123a3 #7 Add release workflow caller
