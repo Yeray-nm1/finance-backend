@@ -66,7 +66,7 @@ export const TransactionRepository = {
         orderBy: { [sortBy]: sortOrder },
         skip,
         take: limit,
-        include: { account: true, category: true },
+        include: { account: true, category: true, subscription: { select: { name: true } } },
       }),
       prisma.transaction.count({ where }),
     ])
@@ -80,6 +80,7 @@ export const TransactionRepository = {
       include: {
         account: true,
         category: true,
+        subscription: { select: { name: true } },
       },
     })
   },
@@ -182,6 +183,18 @@ export const TransactionRepository = {
   async deleteAllImported(userId: string) {
     return prisma.transaction.deleteMany({
       where: { userId, source: 'import' }
+    })
+  },
+
+  async countAll(userId: string) {
+    return prisma.transaction.count({ where: { userId } })
+  },
+
+  async findLatestExpenses(userId: string, limit: number) {
+    return prisma.transaction.findMany({
+      where: { userId, type: 'expense' },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
     })
   },
 

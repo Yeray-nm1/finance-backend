@@ -45,6 +45,9 @@ model Transaction {
   type        TransactionType
   hash        String
   source      String   @default("manual")
+  subscriptionId String?
+
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
 
   createdAt   DateTime @default(now())
 
@@ -57,6 +60,7 @@ model Transaction {
   @@index([userId, categoryId])
   @@index([userId, amount])
   @@index([description])
+  @@index([userId, subscriptionId])
 }
 
 model Category {
@@ -112,15 +116,42 @@ model Subscription {
   amount      Float
   frequency   SubscriptionFrequency
 
-  confidence  Float // 0-1 (detección automática)
-  source      SubscriptionSource
+  matchDescriptions String[]  @default([])
+  amountTolerance   Float     @default(10.0)
 
   createdAt   DateTime @default(now())
 
   user        User @relation(fields: [userId], references: [id])
 
+  transactions Transaction[]
+
   @@index([userId])
   @@index([name])
+}
+
+model PriceChange {
+  id              String   @id @default(uuid())
+  userId          String
+  subscriptionId  String
+  transactionId   String
+  previousAmount  Float
+  newAmount       Float
+  seen            Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([userId, subscriptionId])
+  @@index([userId, seen])
+}
+
+model SubscriptionConflict {
+  id              String   @id @default(uuid())
+  userId          String
+  transactionId   String
+  subscriptionIds String[]
+  resolved        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([userId, resolved])
 }
 
 model NotificationRule {
@@ -153,11 +184,9 @@ enum CategoryType {
 
 enum SubscriptionFrequency {
   weekly
+  biweekly
   monthly
+  bimonthly
+  quarterly
   yearly
-}
-
-enum SubscriptionSource {
-  manual
-  detected
 }
