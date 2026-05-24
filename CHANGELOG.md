@@ -1,3 +1,8 @@
+## [1.2.0] - 2026-05-24
+
+- bb3bffb Merge pull request #9 from Yeray-nm1/feature/ynm-6-sistema-de-suscripciones-v2--modelo-de-datos-y-end
+- f1bc68f feat: subscription management v2 - create/edit/autodetect with refactored data structures
+
 ## [1.1.0] - 2026-05-22
 
 - d0755e4 Merge pull request #8 from Yeray-nm1/feature/ynm-7-add-release-workflow
