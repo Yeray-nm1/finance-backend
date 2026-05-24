@@ -170,9 +170,7 @@ export const DashboardService = {
     }
 
     return {
-      manual: subscriptions
-        .filter((s) => s.source === 'manual')
-        .map((s) => ({
+      manual: subscriptions.map((s) => ({
           name: s.name,
           amount: s.amount,
           frequency: s.frequency,

@@ -1,6 +1,8 @@
 import { TransactionRepository, CreateTransactionDTO, TransactionFilters } from './transactions.repository'
 import { NotFoundError, BadRequestError } from '../../core/errors'
 import { createTransactionHash } from '../../utils/hash'
+import { SubscriptionRepository } from '../subscriptions/subscriptions.repository'
+import { normalizeDescription } from '../../utils/normalize'
 
 export type UpdateTransactionDTO = {
   description?: string
@@ -136,7 +138,45 @@ export const TransactionService = {
       throw new BadRequestError('No valid transactions found in CSV')
     }
 
+    const beforeCount = await TransactionRepository.countAll(userId)
+
     const result = await TransactionRepository.createMany(transactions)
+
+    const afterCount = await TransactionRepository.countAll(userId)
+    const newlyCreated = afterCount - beforeCount
+
+    if (newlyCreated > 0) {
+      const expenseTransactions = await TransactionRepository.findLatestExpenses(userId, newlyCreated)
+
+      for (const tx of expenseTransactions) {
+        const normalizedDesc = normalizeDescription(tx.description)
+        const matchingSubs = await SubscriptionRepository.findSubscriptionsByMatchDescription(userId, normalizedDesc)
+
+        if (matchingSubs.length === 1) {
+          const sub = matchingSubs[0]
+          await SubscriptionRepository.linkTransaction(userId, tx.id, sub.id)
+
+          const tolerance = sub.amountTolerance ?? 10.0
+          const amount = Math.abs(tx.amount)
+          const diff = Math.abs(amount - sub.amount)
+          const maxDiff = sub.amount * (tolerance / 100)
+
+          if (diff > maxDiff) {
+            await SubscriptionRepository.createPriceChange(userId, {
+              subscriptionId: sub.id,
+              transactionId: tx.id,
+              previousAmount: sub.amount,
+              newAmount: amount,
+            })
+          }
+        } else if (matchingSubs.length > 1) {
+          await SubscriptionRepository.createConflict(userId, {
+            transactionId: tx.id,
+            subscriptionIds: matchingSubs.map((s) => s.id),
+          })
+        }
+      }
+    }
 
     return {
       imported: result.count,
