@@ -10,6 +10,7 @@ export type CreateTransactionDTO = {
   type: TransactionType
   accountId?: string
   categoryId?: string
+  isSubscription?: boolean
 }
 
 export type TransactionFilters = {
@@ -21,6 +22,8 @@ export type TransactionFilters = {
   dateFrom?: string
   dateTo?: string
   search?: string
+  isSubscription?: string
+  subscriptionIds?: string
   sortBy?: string
   sortOrder?: string
 }
@@ -49,6 +52,9 @@ export const TransactionRepository = {
         contains: filters.search,
         mode: 'insensitive',
       }
+    }
+    if (filters.subscriptionIds) {
+      where.subscriptionId = { in: filters.subscriptionIds.split(',') }
     }
     if (filters.dateFrom || filters.dateTo) {
       where.date = {}
@@ -113,6 +119,7 @@ export const TransactionRepository = {
     accountId?: string | null
     categoryId?: string | null
     hash: string
+    isSubscription?: boolean
   }) {
     return prisma.transaction.create({ data })
   },
@@ -206,6 +213,7 @@ export const TransactionRepository = {
     accountId: string | null
     categoryId: string | null
     hash: string
+    isSubscription: boolean
   }>) {
     const tx = await prisma.transaction.updateMany({
       where: { id, userId },

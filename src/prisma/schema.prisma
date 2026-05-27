@@ -45,6 +45,7 @@ model Transaction {
   type        TransactionType
   hash        String
   source      String   @default("manual")
+  isSubscription Boolean @default(false)
   subscriptionId String?
 
   subscription Subscription? @relation(fields: [subscriptionId], references: [id])

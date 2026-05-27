@@ -5,7 +5,7 @@ import { BadRequestError } from '../../core/errors'
 
 export const TransactionController = {
   async getAll(req: Request, res: Response) {
-    const { page, limit, type, categoryId, accountId, dateFrom, dateTo, search, sortBy, sortOrder } = req.query
+    const { page, limit, type, categoryId, accountId, dateFrom, dateTo, search, isSubscription, subscriptionIds, sortBy, sortOrder } = req.query
     const result = await TransactionService.getAll(req.userId, {
       page: page ? parseInt(page as string) : undefined,
       limit: limit ? parseInt(limit as string) : undefined,
@@ -15,6 +15,8 @@ export const TransactionController = {
       dateFrom: dateFrom as string | undefined,
       dateTo: dateTo as string | undefined,
       search: search as string | undefined,
+      isSubscription: isSubscription as string | undefined,
+      subscriptionIds: subscriptionIds as string | undefined,
       sortBy: sortBy as string | undefined,
       sortOrder: sortOrder as string | undefined,
     })
@@ -28,7 +30,7 @@ export const TransactionController = {
 
   async create(req: Request, res: Response) {
     requireFields(req.body, 'date', 'amount', 'description', 'type')
-    const { date, amount, description, type, accountId, categoryId } = req.body
+    const { date, amount, description, type, accountId, categoryId, isSubscription } = req.body
 
     const transaction = await TransactionService.create(req.userId, {
       date,
@@ -37,6 +39,7 @@ export const TransactionController = {
       type: requireEnum(type, ['income', 'expense', 'transfer'], 'type'),
       accountId,
       categoryId,
+      isSubscription: isSubscription !== undefined ? Boolean(isSubscription) : undefined,
     })
 
     res.status(201).json(transaction)
@@ -54,7 +57,7 @@ export const TransactionController = {
   },
 
   async update(req: Request, res: Response) {
-    const { description, type, amount, date, accountId, categoryId } = req.body
+    const { description, type, amount, date, accountId, categoryId, isSubscription } = req.body
     const transaction = await TransactionService.update(req.userId, req.params.id as string, {
       description,
       type: type ? String(type) as 'income' | 'expense' | 'transfer' : undefined,
@@ -62,6 +65,7 @@ export const TransactionController = {
       date: date ? String(date) : undefined,
       accountId: accountId !== undefined ? accountId : undefined,
       categoryId: categoryId !== undefined ? categoryId : undefined,
+      isSubscription: isSubscription !== undefined ? Boolean(isSubscription) : undefined,
     })
     res.json(transaction)
   },
