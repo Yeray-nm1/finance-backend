@@ -11,6 +11,7 @@ export type UpdateTransactionDTO = {
   date?: string
   accountId?: string | null
   categoryId?: string | null
+  isSubscription?: boolean
 }
 
 export const TransactionService = {
@@ -54,6 +55,7 @@ export const TransactionService = {
       accountId: dto.accountId || null,
       categoryId: dto.categoryId || null,
       hash,
+      isSubscription: dto.isSubscription ?? false,
     })
   },
 
@@ -71,6 +73,7 @@ export const TransactionService = {
     if (dto.date !== undefined) data.date = new Date(dto.date)
     if (dto.accountId !== undefined) data.accountId = dto.accountId
     if (dto.categoryId !== undefined) data.categoryId = dto.categoryId
+    if (dto.isSubscription !== undefined) data.isSubscription = dto.isSubscription
 
     const dateChanged = dto.date !== undefined
     const amountChanged = dto.amount !== undefined
