@@ -1,3 +1,9 @@
+## [1.3.0] - 2026-05-27
+
+- 427ffac Merge pull request #11 from Yeray-nm1/feature/ynm-10-aadir-campo-issubscription-al-modelo-transaction
+- 0db743e #10 Add subscriptionIds filter to transactions API
+- b403b63 #10 Update project version for feature branch
+
 ## [1.2.0] - 2026-05-24
 
 - bb3bffb Merge pull request #9 from Yeray-nm1/feature/ynm-6-sistema-de-suscripciones-v2--modelo-de-datos-y-end
