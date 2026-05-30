@@ -10,4 +10,9 @@ export const DashboardController = {
     const dashboard = await DashboardService.getDashboard(req.userId, year, month)
     res.json(dashboard)
   },
+
+  async getMonths(_req: Request, res: Response) {
+    const months = await DashboardService.getAvailableMonths(_req.userId)
+    res.json(months)
+  },
 }
