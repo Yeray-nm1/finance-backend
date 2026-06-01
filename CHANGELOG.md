@@ -1,3 +1,9 @@
+## [1.3.1] - 2026-06-01
+
+- 719c57d Merge pull request #13 from Yeray-nm1/feature/ynm-12-extend-dashboard-api-to-return-categorytype-in-bud
+- 39d36c5 extended dashboard api
+- 927c352 #12 Update project version for feature branch
+
 ## [1.3.0] - 2026-05-27
 
 - 427ffac Merge pull request #11 from Yeray-nm1/feature/ynm-10-aadir-campo-issubscription-al-modelo-transaction
