@@ -1,3 +1,9 @@
+## [1.3.2] - 2026-06-01
+
+- d66cd89 Merge pull request #15 from Yeray-nm1/feature/ynm-14-auth-restrigir-rate-limiter-a-solo-loginregister
+- ae1186b fixed limiter when auth
+- 0359e96 #14 Update project version for feature branch
+
 ## [1.3.1] - 2026-06-01
 
 - 719c57d Merge pull request #13 from Yeray-nm1/feature/ynm-12-extend-dashboard-api-to-return-categorytype-in-bud
