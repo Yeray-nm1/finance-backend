@@ -29,14 +29,6 @@ const globalLimiter = rateLimit({
   message: { error: 'Demasiadas peticiones. Intenta de nuevo en un minuto.' },
 })
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Demasiados intentos. Intenta de nuevo en 15 minutos.' },
-})
-
 app.use(globalLimiter)
 app.use(cors({
   origin: config.frontendUrl,
@@ -46,7 +38,7 @@ app.use(express.json())
 app.use(cookieParser())
 app.use(morgan('dev'))
 
-app.use('/api/v1/auth', authLimiter, authRoutes)
+app.use('/api/v1/auth', authRoutes)
 
 app.use(authMiddleware)
 
