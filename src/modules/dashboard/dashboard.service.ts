@@ -1,6 +1,13 @@
 import { prisma } from '../../core/db'
-import { Transaction, Budget, Subscription } from '@prisma/client'
+import { Transaction, Budget, Subscription, CategoryType } from '@prisma/client'
 import { normalizeDescription } from '../../utils/normalize'
+
+const TYPE_LABELS: Record<string, string> = {
+  needs: 'Necesidades',
+  leisure: 'Ocio',
+  savings: 'Ahorro',
+  other: 'Otros',
+}
 
 type SubscriptionFrequency = 'weekly' | 'monthly' | 'yearly'
 
@@ -16,6 +23,36 @@ function round2(n: number): number {
 }
 
 export const DashboardService = {
+  async getAvailableMonths(userId: string) {
+    const [txMonths, budgetMonths] = await Promise.all([
+      prisma.transaction.findMany({
+        where: { userId },
+        select: { date: true },
+      }),
+      prisma.monthlyBudget.findMany({
+        where: { userId },
+        select: { year: true, month: true },
+      }),
+    ])
+
+    const seen = new Set<string>()
+
+    for (const t of txMonths) {
+      seen.add(`${t.date.getFullYear()}-${t.date.getMonth() + 1}`)
+    }
+    for (const b of budgetMonths) {
+      seen.add(`${b.year}-${b.month}`)
+    }
+
+    return Array.from(seen)
+      .map((k) => {
+        const [y, m] = k.split('-').map(Number)
+        return { year: y, month: m }
+      })
+      .sort((a, b) => a.year - b.year || a.month - b.month)
+  },
+
+
   async getMonthOverview(userId: string, year: number, month: number) {
     const start = new Date(year, month - 1, 1)
     const end = new Date(year, month, 1)
@@ -54,6 +91,68 @@ export const DashboardService = {
     const start = new Date(year, month - 1, 1)
     const end = new Date(year, month, 1)
 
+    const monthlyBudget = await prisma.monthlyBudget.findUnique({
+      where: { userId_month_year: { userId, month, year } },
+    })
+
+    if (monthlyBudget) {
+      const allocations = monthlyBudget.typeAllocations as Array<{ type: CategoryType; percentage: number }>
+
+      const categories = await prisma.category.findMany({ where: { userId } })
+      const categoriesByType: Record<string, Array<{ id: string; name: string }>> = {}
+      for (const cat of categories) {
+        if (!categoriesByType[cat.type]) categoriesByType[cat.type] = []
+        categoriesByType[cat.type].push({ id: cat.id, name: cat.name })
+      }
+
+      const expenseTx = await prisma.transaction.findMany({
+        where: { userId, type: 'expense', date: { gte: start, lt: end }, categoryId: { not: null } },
+        select: { categoryId: true, amount: true },
+      })
+
+      const spentByCategory: Record<string, number> = {}
+      for (const tx of expenseTx) {
+        if (tx.categoryId) {
+          spentByCategory[tx.categoryId] = (spentByCategory[tx.categoryId] ?? 0) + Math.abs(tx.amount)
+        }
+      }
+
+      return allocations.flatMap((a) => {
+        const budgeted = monthlyBudget.totalIncome * (a.percentage / 100)
+        const typeCats = categoriesByType[a.type] ?? []
+
+        if (typeCats.length === 0) {
+          const spent = 0
+          const progress = 0
+          return [{
+            category: TYPE_LABELS[a.type] ?? a.type,
+            categoryType: a.type,
+            percentage: a.percentage,
+            spent: round2(spent),
+            budgeted: round2(budgeted),
+            progress: round2(progress),
+            status: 'ok' as const,
+          }]
+        }
+
+        return typeCats.map((cat) => {
+          const spent = spentByCategory[cat.id] ?? 0
+          const progress = budgeted > 0 ? (spent / budgeted) * 100 : 0
+          const status = progress > 100 ? 'over' : progress > 80 ? 'warning' : 'ok'
+
+          return {
+            category: cat.name,
+            categoryType: a.type,
+            percentage: a.percentage,
+            spent: round2(spent),
+            budgeted: round2(budgeted),
+            progress: round2(progress),
+            status,
+          }
+        })
+      })
+    }
+
     const budgets = await prisma.budget.findMany({
       where: { userId, month, year },
       include: { category: true },
@@ -88,6 +187,7 @@ export const DashboardService = {
 
       return {
         category: b.category.name,
+        categoryType: b.category.type,
         percentage: b.percentage,
         spent: round2(spent),
         budgeted: round2(budgeted),
@@ -107,10 +207,11 @@ export const DashboardService = {
     if (previousBalance.balance === 0) return undefined
 
     const change = ((currentBalance.balance - previousBalance.balance) / Math.abs(previousBalance.balance)) * 100
-    return round2(change)
+    const amountDiff = currentBalance.balance - previousBalance.balance
+    return { percentage: round2(change), amountDiff: round2(amountDiff) }
   },
 
-  async getRecurring(userId: string) {
+  async getRecurring(userId: string, year?: number, month?: number) {
     const subscriptions = await prisma.subscription.findMany({
       where: { userId },
       orderBy: { amount: 'desc' },
@@ -169,20 +270,85 @@ export const DashboardService = {
       })
     }
 
-    return {
-      manual: subscriptions.map((s) => ({
+    const now = year !== undefined && month !== undefined
+      ? new Date(year, month - 1, 1)
+      : new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+
+    const manual = await Promise.all(
+      subscriptions.map(async (s) => {
+        let lastTx = await prisma.transaction.findFirst({
+          where: { userId, subscriptionId: s.id },
+          orderBy: { date: 'desc' },
+          select: { date: true },
+        })
+
+        if (!lastTx) {
+          const normalizedName = normalizeDescription(s.name)
+          lastTx = await prisma.transaction.findFirst({
+            where: { userId, description: { contains: normalizedName, mode: 'insensitive' } },
+            orderBy: { date: 'desc' },
+            select: { date: true },
+          })
+        }
+
+        const isPaid = lastTx && lastTx.date >= monthStart && lastTx.date < monthEnd
+        const status = isPaid ? 'paid' : 'pending'
+        const lastChargeDate = lastTx ? lastTx.date.toISOString() : null
+
+        let nextChargeDate: string | null = null
+        if (lastTx) {
+          const d = new Date(lastTx.date)
+          switch (s.frequency) {
+            case 'weekly':
+              d.setDate(d.getDate() + 7)
+              break
+            case 'biweekly':
+              d.setDate(d.getDate() + 14)
+              break
+            case 'monthly':
+              d.setMonth(d.getMonth() + 1)
+              break
+            case 'bimonthly':
+              d.setMonth(d.getMonth() + 2)
+              break
+            case 'quarterly':
+              d.setMonth(d.getMonth() + 3)
+              break
+            case 'yearly':
+              d.setFullYear(d.getFullYear() + 1)
+              break
+          }
+          nextChargeDate = d.toISOString()
+        }
+
+        return {
           name: s.name,
           amount: s.amount,
           frequency: s.frequency,
-          status: 'paid' as const,
-        })),
+          status,
+          lastChargeDate,
+          nextChargeDate,
+        }
+      }),
+    )
+
+    return {
+      manual,
       detected,
     }
   },
 
-  async getRecentTransactions(userId: string, limit = 20) {
+  async getRecentTransactions(userId: string, year?: number, month?: number, limit = 10) {
+    const where: { userId: string; date?: { gte: Date; lt: Date } } = { userId }
+    if (year !== undefined && month !== undefined) {
+      const start = new Date(year, month - 1, 1)
+      const end = new Date(year, month, 1)
+      where.date = { gte: start, lt: end }
+    }
     const transactions = await prisma.transaction.findMany({
-      where: { userId },
+      where,
       orderBy: { date: 'desc' },
       take: limit,
       include: {
@@ -206,8 +372,8 @@ export const DashboardService = {
     const [balance, budgets, recurring, transactions, vsPreviousMonth] = await Promise.all([
       DashboardService.getMonthOverview(userId, year, month),
       DashboardService.getBudgetBudgets(userId, year, month),
-      DashboardService.getRecurring(userId),
-      DashboardService.getRecentTransactions(userId),
+      DashboardService.getRecurring(userId, year, month),
+      DashboardService.getRecentTransactions(userId, year, month),
       DashboardService.getVsPreviousMonth(userId, year, month),
     ])
 
