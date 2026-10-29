@@ -1,3 +1,8 @@
+## [1.3.4] - 2026-10-29
+
+- 7c6e8be Merge pull request #17 from Yeray-nm1/fix/csv-import-spanish-format
+- ce83be6 fix(csv): parse Spanish amounts and dates correctly
+
 ## [1.3.3] - 2026-10-29
 
 - 7bd2275 Merge pull request #16 from Yeray-nm1/fix/auth-rate-limit-failed-attempts
