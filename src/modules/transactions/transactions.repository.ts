@@ -133,6 +133,7 @@ export const TransactionRepository = {
     accountId?: string | null
     categoryId?: string | null
     hash: string
+    source?: string
   }>) {
     return prisma.transaction.createMany({
       data: transactions,

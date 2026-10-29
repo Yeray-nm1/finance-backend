@@ -5,11 +5,11 @@ const router = Router()
 
 router.get('/', TransactionController.getAll)
 router.post('/import', TransactionController.importCsv)
-router.get('/:id', TransactionController.getById)
 router.post('/', TransactionController.create)
-router.patch('/:id', TransactionController.update)
-router.delete('/:id', TransactionController.delete)
 router.delete('/batch', TransactionController.deleteMany)
 router.delete('/imported', TransactionController.deleteAllImported)
+router.get('/:id', TransactionController.getById)
+router.patch('/:id', TransactionController.update)
+router.delete('/:id', TransactionController.delete)
 
 export default router
