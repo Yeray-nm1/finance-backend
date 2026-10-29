@@ -19,6 +19,13 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes'
 
 const app = express()
 
+// Detrás del proxy de producción, req.ip debe ser el del cliente real.
+// Sin esto, todos los usuarios comparten la IP del proxy y el rate limit
+// (10 intentos fallidos / 15 min) bloquearía a todo el mundo a la vez.
+if (config.nodeEnv === 'production') {
+  app.set('trust proxy', 1)
+}
+
 app.use(helmet())
 
 const globalLimiter = rateLimit({
