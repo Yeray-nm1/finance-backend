@@ -1,8 +1,17 @@
 import { TransactionRepository, CreateTransactionDTO, TransactionFilters } from './transactions.repository'
-import { NotFoundError, BadRequestError } from '../../core/errors'
+import { NotFoundError } from '../../core/errors'
 import { createTransactionHash } from '../../utils/hash'
 import { SubscriptionRepository } from '../subscriptions/subscriptions.repository'
 import { normalizeDescription } from '../../utils/normalize'
+import {
+  formatCsvDate,
+  normalizeCsvRow,
+  parseCsvAmount,
+  parseCsvDate,
+  parseCsvType,
+  pickCsvField,
+  type CsvTransactionType,
+} from '../../utils/csv'
 
 export type UpdateTransactionDTO = {
   description?: string
@@ -95,61 +104,81 @@ export const TransactionService = {
       date: Date
       amount: number
       description: string
-      type: 'income' | 'expense' | 'transfer'
+      type: CsvTransactionType
       accountId?: string | null
       categoryId?: string | null
       hash: string
+      source: string
     }> = []
 
-    for (const row of rows) {
-      const date = row.date || row.Date || row.fecha || row.FECHA
-      const amount = row.amount || row.Amount || row.importe || row.IMPORTE
-      const description = row.description || row.Description || row.descripcion || row.DESCRIPCION || row.concepto || row.CONCEPTO
-      const type = (row.type || row.Type || row.tipo || row.TIPO || 'expense').toLowerCase()
+    const errors: Array<{ row: number; reason: string }> = []
+    let invalid = 0
 
-      if (!date || !amount || !description) {
+    for (const [index, row] of rows.entries()) {
+      const rowNumber = index + 2
+      const normalizedRow = normalizeCsvRow(row)
+
+      const rawDate = pickCsvField(normalizedRow, 'date')
+      const rawAmount = pickCsvField(normalizedRow, 'amount')
+      const rawDescription = pickCsvField(normalizedRow, 'description')
+      const rawType = pickCsvField(normalizedRow, 'type')
+
+      if (!rawDate || !rawAmount || !rawDescription) {
+        const missingFields: string[] = []
+        if (!rawDate) missingFields.push('fecha')
+        if (!rawAmount) missingFields.push('importe')
+        if (!rawDescription) missingFields.push('concepto')
+
+        invalid++
+        errors.push({ row: rowNumber, reason: `Faltan campos: ${missingFields.join(', ')}` })
         continue
       }
 
-      const parsedAmount = parseFloat(String(amount).replace(/[^\d.,-]/g, '').replace(',', '.'))
-
-      if (isNaN(parsedAmount) || parsedAmount === 0) {
+      const date = parseCsvDate(rawDate)
+      if (!date) {
+        invalid++
+        errors.push({ row: rowNumber, reason: `Fecha inválida: ${rawDate}` })
         continue
       }
 
-      const normalizedType: 'income' | 'expense' | 'transfer' =
-        ['income', 'expense', 'transfer'].includes(type)
-          ? (type as 'income' | 'expense' | 'transfer')
-          : parsedAmount >= 0
-            ? 'income'
-            : 'expense'
+      const parsedAmount = parseCsvAmount(rawAmount)
+      if (parsedAmount === null || parsedAmount === 0) {
+        invalid++
+        errors.push({ row: rowNumber, reason: `Importe inválido: ${rawAmount}` })
+        continue
+      }
 
-      const dateStr = new Date(date).toISOString()
-      const hash = createTransactionHash(dateStr, parsedAmount, description)
+      const explicitType = parseCsvType(rawType)
+      const type: CsvTransactionType = explicitType ?? (parsedAmount >= 0 ? 'income' : 'expense')
+      const amount =
+        type === 'income'
+          ? Math.abs(parsedAmount)
+          : type === 'expense'
+            ? -Math.abs(parsedAmount)
+            : parsedAmount
+
+      const description = rawDescription.trim()
+      const hash = createTransactionHash(formatCsvDate(date), amount, description)
 
       transactions.push({
         userId,
-        date: new Date(date),
-        amount: parsedAmount,
-        description: String(description),
-        type: normalizedType,
+        date,
+        amount,
+        description,
+        type,
         hash,
+        source: 'import',
       })
     }
 
-    if (transactions.length === 0) {
-      throw new BadRequestError('No valid transactions found in CSV')
-    }
+    const result = transactions.length > 0
+      ? await TransactionRepository.createMany(transactions)
+      : { count: 0 }
 
-    const beforeCount = await TransactionRepository.countAll(userId)
+    const imported = result.count
 
-    const result = await TransactionRepository.createMany(transactions)
-
-    const afterCount = await TransactionRepository.countAll(userId)
-    const newlyCreated = afterCount - beforeCount
-
-    if (newlyCreated > 0) {
-      const expenseTransactions = await TransactionRepository.findLatestExpenses(userId, newlyCreated)
+    if (imported > 0) {
+      const expenseTransactions = await TransactionRepository.findLatestExpenses(userId, imported)
 
       for (const tx of expenseTransactions) {
         const normalizedDesc = normalizeDescription(tx.description)
@@ -182,8 +211,12 @@ export const TransactionService = {
     }
 
     return {
-      imported: result.count,
-      total: transactions.length,
+      imported,
+      total: rows.length,
+      valid: transactions.length,
+      duplicates: transactions.length - imported,
+      invalid,
+      errors: errors.slice(0, 10),
     }
   },
 }
