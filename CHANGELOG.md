@@ -1,3 +1,8 @@
+## [1.3.3] - 2026-10-29
+
+- 7bd2275 Merge pull request #16 from Yeray-nm1/fix/auth-rate-limit-failed-attempts
+- d7f6040 fix: only failed auth attempts should count against rate limit
+
 ## [1.3.2] - 2026-06-01
 
 - d66cd89 Merge pull request #15 from Yeray-nm1/feature/ynm-14-auth-restrigir-rate-limiter-a-solo-loginregister
