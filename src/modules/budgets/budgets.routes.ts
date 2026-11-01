@@ -4,6 +4,7 @@ import { BudgetController } from './budgets.controller'
 const router = Router()
 
 router.get('/', BudgetController.list)
+router.get('/months', BudgetController.getMonths)
 router.get('/calculate-income', BudgetController.calculateIncome)
 router.get('/monthly', BudgetController.getMonthly)
 router.put('/monthly', BudgetController.upsertMonthly)

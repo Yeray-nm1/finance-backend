@@ -47,6 +47,14 @@ export const BudgetRepository = {
     })
   },
 
+  async findMonthlyMonths(userId: string) {
+    return prisma.monthlyBudget.findMany({
+      where: { userId },
+      select: { year: true, month: true },
+      orderBy: [{ year: 'asc' }, { month: 'asc' }],
+    })
+  },
+
   async upsertMonthly(
     userId: string, month: number, year: number,
     totalIncome: number, typeAllocations: unknown,

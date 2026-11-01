@@ -32,6 +32,11 @@ export const BudgetController = {
     res.status(204).send()
   },
 
+  async getMonths(req: Request, res: Response) {
+    const months = await BudgetService.getAvailableMonths(req.userId)
+    res.json(months)
+  },
+
   async getMonthly(req: Request, res: Response) {
     const month = parseInt(req.query.month as string, 10)
     const year = parseInt(req.query.year as string, 10)

@@ -51,6 +51,10 @@ export const BudgetService = {
     return BudgetRepository.findMonthly(userId, month, year)
   },
 
+  async getAvailableMonths(userId: string) {
+    return BudgetRepository.findMonthlyMonths(userId)
+  },
+
   async upsertMonthly(
     userId: string, month: number, year: number,
     totalIncome: number, typeAllocations: unknown,
