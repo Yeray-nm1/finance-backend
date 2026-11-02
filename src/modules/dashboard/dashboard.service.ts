@@ -22,6 +22,15 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
+function splitEvenly(total: number, count: number): number[] {
+  if (count <= 0) return []
+  const totalCents = Math.round(total * 100)
+  const base = Math.floor(totalCents / count)
+  const values = Array.from({ length: count }, () => base)
+  values[count - 1] += totalCents - base * count
+  return values.map((cents) => cents / 100)
+}
+
 export const DashboardService = {
   async getAvailableMonths(userId: string) {
     const [txMonths, budgetMonths] = await Promise.all([
@@ -97,6 +106,11 @@ export const DashboardService = {
 
     if (monthlyBudget) {
       const allocations = monthlyBudget.typeAllocations as Array<{ type: CategoryType; percentage: number }>
+      const storedAllocations = (monthlyBudget.categoryAllocations ?? []) as Array<{
+        categoryId: string
+        amount: number
+      }>
+      const storedByCategory = new Map(storedAllocations.map((a) => [a.categoryId, a.amount]))
 
       const categories = await prisma.category.findMany({ where: { userId } })
       const categoriesByType: Record<string, Array<{ id: string; name: string }>> = {}
@@ -118,34 +132,40 @@ export const DashboardService = {
       }
 
       return allocations.flatMap((a) => {
-        const budgeted = monthlyBudget.totalIncome * (a.percentage / 100)
+        const typeAmount = monthlyBudget.totalIncome * (a.percentage / 100)
         const typeCats = categoriesByType[a.type] ?? []
 
         if (typeCats.length === 0) {
-          const spent = 0
-          const progress = 0
           return [{
             category: TYPE_LABELS[a.type] ?? a.type,
             categoryType: a.type,
             percentage: a.percentage,
-            spent: round2(spent),
-            budgeted: round2(budgeted),
-            progress: round2(progress),
+            spent: 0,
+            budgeted: round2(typeAmount),
+            progress: 0,
             status: 'ok' as const,
           }]
         }
 
-        return typeCats.map((cat) => {
+        const hasStoredAllocations = typeCats.some((cat) => storedByCategory.has(cat.id))
+        const categoryAmounts = hasStoredAllocations
+          ? typeCats.map((cat) => storedByCategory.get(cat.id) ?? 0)
+          : splitEvenly(typeAmount, typeCats.length)
+
+        return typeCats.map((cat, index) => {
           const spent = spentByCategory[cat.id] ?? 0
+          const budgeted = round2(categoryAmounts[index] ?? 0)
           const progress = budgeted > 0 ? (spent / budgeted) * 100 : 0
-          const status = progress > 100 ? 'over' : progress > 80 ? 'warning' : 'ok'
+          const status = budgeted === 0
+            ? (spent > 0 ? 'over' as const : 'ok' as const)
+            : progress > 100 ? 'over' as const : progress > 80 ? 'warning' as const : 'ok' as const
 
           return {
             category: cat.name,
             categoryType: a.type,
-            percentage: a.percentage,
+            percentage: typeAmount > 0 ? round2((budgeted / typeAmount) * 100) : 0,
             spent: round2(spent),
-            budgeted: round2(budgeted),
+            budgeted,
             progress: round2(progress),
             status,
           }

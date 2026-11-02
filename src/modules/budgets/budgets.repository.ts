@@ -57,12 +57,27 @@ export const BudgetRepository = {
 
   async upsertMonthly(
     userId: string, month: number, year: number,
-    totalIncome: number, typeAllocations: unknown,
+    totalIncome: number, typeAllocations: unknown, categoryAllocations: unknown,
   ) {
     return prisma.monthlyBudget.upsert({
       where: { userId_month_year: { userId, month, year } },
-      create: { userId, month, year, totalIncome, typeAllocations: typeAllocations as any },
-      update: { totalIncome, typeAllocations: typeAllocations as any },
+      create: {
+        userId, month, year, totalIncome,
+        typeAllocations: typeAllocations as any,
+        categoryAllocations: categoryAllocations as any,
+      },
+      update: {
+        totalIncome,
+        typeAllocations: typeAllocations as any,
+        categoryAllocations: categoryAllocations as any,
+      },
+    })
+  },
+
+  async findCategories(userId: string) {
+    return prisma.category.findMany({
+      where: { userId },
+      select: { id: true, type: true },
     })
   },
 

@@ -63,8 +63,10 @@ export const BudgetController = {
       return
     }
 
-    const { totalIncome, typeAllocations } = req.body
-    const budget = await BudgetService.upsertMonthly(req.userId, month, year, totalIncome, typeAllocations)
+    const { totalIncome, typeAllocations, categoryAllocations } = req.body
+    const budget = await BudgetService.upsertMonthly(
+      req.userId, month, year, totalIncome, typeAllocations, categoryAllocations
+    )
     res.json(budget)
   },
 
