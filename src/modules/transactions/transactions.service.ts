@@ -2,6 +2,7 @@ import { TransactionRepository, CreateTransactionDTO, TransactionFilters } from 
 import { NotFoundError } from '../../core/errors'
 import { createTransactionHash } from '../../utils/hash'
 import { SubscriptionRepository } from '../subscriptions/subscriptions.repository'
+import { AccountService } from '../accounts/accounts.service'
 import { normalizeDescription } from '../../utils/normalize'
 import {
   detectCsvAmountFormat,
@@ -158,6 +159,9 @@ export const TransactionService = {
 
   async create(userId: string, dto: CreateTransactionDTO) {
     const hash = createTransactionHash(dto.date, dto.amount, dto.description)
+    const accountId = dto.accountId
+      ? await AccountService.getOwnedId(userId, dto.accountId)
+      : null
 
     return TransactionRepository.create({
       userId,
@@ -165,7 +169,7 @@ export const TransactionService = {
       amount: dto.amount,
       description: dto.description,
       type: dto.type,
-      accountId: dto.accountId || null,
+      accountId,
       categoryId: dto.categoryId || null,
       hash,
       isSubscription: dto.isSubscription ?? false,
@@ -184,7 +188,11 @@ export const TransactionService = {
     if (dto.type !== undefined) data.type = dto.type
     if (dto.amount !== undefined) data.amount = dto.amount
     if (dto.date !== undefined) data.date = new Date(dto.date)
-    if (dto.accountId !== undefined) data.accountId = dto.accountId
+    if (dto.accountId !== undefined) {
+      data.accountId = dto.accountId
+        ? await AccountService.getOwnedId(userId, dto.accountId)
+        : null
+    }
     if (dto.categoryId !== undefined) data.categoryId = dto.categoryId
     if (dto.isSubscription !== undefined) data.isSubscription = dto.isSubscription
 
@@ -292,10 +300,15 @@ export const TransactionService = {
   async importMany(
     userId: string,
     rows: Array<Record<string, string>>,
-    mappingInput?: unknown
+    mappingInput?: unknown,
+    accountIdInput?: unknown
   ) {
     const mapping = resolveCsvMapping(rows, mappingInput)
     const entries = buildCsvEntries(rows, mapping)
+
+    const accountId = typeof accountIdInput === 'string' && accountIdInput
+      ? await AccountService.getOwnedId(userId, accountIdInput)
+      : (await AccountService.getDefault(userId))?.id ?? null
 
     const errors = entries
       .filter((entry) => entry.error !== null)
@@ -332,6 +345,7 @@ export const TransactionService = {
         amount: entry.amount,
         description: entry.description,
         type: entry.type,
+        accountId,
         hash: entry.hash,
         source: 'import',
       })

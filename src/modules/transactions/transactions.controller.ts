@@ -63,7 +63,12 @@ export const TransactionController = {
       throw new BadRequestError('rows must be a non-empty array')
     }
 
-    const result = await TransactionService.importMany(req.userId, rows, req.body.mapping)
+    const result = await TransactionService.importMany(
+      req.userId,
+      rows,
+      req.body.mapping,
+      req.body.accountId
+    )
     res.status(201).json(result)
   },
 

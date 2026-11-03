@@ -17,11 +17,32 @@ export const UserRepository = {
   },
 
   async create(email: string, hashedPassword: string) {
-    return prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-      },
+    return prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          accounts: {
+            create: {
+              name: 'Cuenta principal',
+              type: 'checking',
+            },
+          },
+        },
+      })
+
+      await tx.category.createMany({
+        data: [
+          { userId: user.id, name: 'Nómina', type: 'needs' },
+          { userId: user.id, name: 'Hipoteca', type: 'needs' },
+          { userId: user.id, name: 'Supermercado', type: 'needs' },
+          { userId: user.id, name: 'Restaurante', type: 'leisure' },
+          { userId: user.id, name: 'Ocio', type: 'leisure' },
+          { userId: user.id, name: 'Ahorro', type: 'savings' },
+        ],
+      })
+
+      return user
     })
   },
 
