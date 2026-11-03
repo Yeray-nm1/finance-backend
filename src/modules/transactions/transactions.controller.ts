@@ -45,6 +45,17 @@ export const TransactionController = {
     res.status(201).json(transaction)
   },
 
+  async previewCsv(req: Request, res: Response) {
+    const rows = requireField<Array<Record<string, string>>>(req.body, 'rows')
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new BadRequestError('rows must be a non-empty array')
+    }
+
+    const result = await TransactionService.previewImport(req.userId, rows, req.body.mapping)
+    res.json(result)
+  },
+
   async importCsv(req: Request, res: Response) {
     const rows = requireField<Array<Record<string, string>>>(req.body, 'rows')
 
@@ -52,7 +63,7 @@ export const TransactionController = {
       throw new BadRequestError('rows must be a non-empty array')
     }
 
-    const result = await TransactionService.importMany(req.userId, rows)
+    const result = await TransactionService.importMany(req.userId, rows, req.body.mapping)
     res.status(201).json(result)
   },
 

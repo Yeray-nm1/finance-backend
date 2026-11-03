@@ -141,6 +141,23 @@ export const TransactionRepository = {
     })
   },
 
+  async findExistingHashes(userId: string, hashes: string[]) {
+    if (hashes.length === 0) return [] as string[]
+
+    const existing: string[] = []
+
+    for (let index = 0; index < hashes.length; index += 500) {
+      const chunk = hashes.slice(index, index + 500)
+      const rows = await prisma.transaction.findMany({
+        where: { userId, hash: { in: chunk } },
+        select: { hash: true },
+      })
+      existing.push(...rows.map((row) => row.hash))
+    }
+
+    return existing
+  },
+
   async findByDescriptionPattern(userId: string, pattern: string) {
     return prisma.transaction.findMany({
       where: {

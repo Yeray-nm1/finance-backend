@@ -4,12 +4,16 @@ import { createTransactionHash } from '../../utils/hash'
 import { SubscriptionRepository } from '../subscriptions/subscriptions.repository'
 import { normalizeDescription } from '../../utils/normalize'
 import {
+  detectCsvAmountFormat,
+  detectCsvDateFormat,
   formatCsvDate,
   normalizeCsvRow,
   parseCsvAmount,
   parseCsvDate,
   parseCsvType,
-  pickCsvField,
+  pickMappedCsvField,
+  resolveCsvMapping,
+  type CsvMapping,
   type CsvTransactionType,
 } from '../../utils/csv'
 
@@ -21,6 +25,106 @@ export type UpdateTransactionDTO = {
   accountId?: string | null
   categoryId?: string | null
   isSubscription?: boolean
+}
+
+interface CsvEntry {
+  rowNumber: number
+  date: Date | null
+  amount: number | null
+  description: string
+  type: CsvTransactionType
+  hash: string
+  error: string | null
+}
+
+const PREVIEW_ROW_LIMIT = 200
+
+function buildCsvEntries(
+  rows: Array<Record<string, string>>,
+  mapping: CsvMapping
+): CsvEntry[] {
+  return rows.map((row, index) => {
+    const rowNumber = index + 2
+    const normalizedRow = normalizeCsvRow(row)
+
+    const rawDate = pickMappedCsvField(normalizedRow, mapping, 'date')
+    const rawAmount = pickMappedCsvField(normalizedRow, mapping, 'amount')
+    const rawDescription = pickMappedCsvField(normalizedRow, mapping, 'description')
+    const rawType = pickMappedCsvField(normalizedRow, mapping, 'type')
+
+    const missingBase = (
+      date: Date | null,
+      amount: number | null,
+      description: string,
+      error: string | null
+    ): CsvEntry => ({
+      rowNumber,
+      date,
+      amount,
+      description,
+      type: parseCsvType(rawType) ?? 'expense',
+      hash: '',
+      error,
+    })
+
+    if (!rawDate || !rawAmount || !rawDescription) {
+      const missingFields: string[] = []
+      if (!rawDate) missingFields.push('fecha')
+      if (!rawAmount) missingFields.push('importe')
+      if (!rawDescription) missingFields.push('concepto')
+
+      return missingBase(
+        null,
+        null,
+        rawDescription ?? '',
+        `Faltan campos: ${missingFields.join(', ')}`
+      )
+    }
+
+    const date = parseCsvDate(rawDate)
+    if (!date) {
+      return missingBase(null, null, rawDescription, `Fecha inválida: ${rawDate}`)
+    }
+
+    const parsedAmount = parseCsvAmount(rawAmount)
+    if (parsedAmount === null || parsedAmount === 0) {
+      return missingBase(date, null, rawDescription, `Importe inválido: ${rawAmount}`)
+    }
+
+    const explicitType = parseCsvType(rawType)
+    const type: CsvTransactionType = explicitType ?? (parsedAmount >= 0 ? 'income' : 'expense')
+    const amount =
+      type === 'income'
+        ? Math.abs(parsedAmount)
+        : type === 'expense'
+          ? -Math.abs(parsedAmount)
+          : parsedAmount
+
+    const description = rawDescription.trim()
+
+    return {
+      rowNumber,
+      date,
+      amount,
+      description,
+      type,
+      hash: createTransactionHash(formatCsvDate(date), amount, description),
+      error: null,
+    }
+  })
+}
+
+function firstMappedValue(
+  rows: Array<Record<string, string>>,
+  mapping: CsvMapping,
+  field: 'date' | 'amount'
+): string | null {
+  for (const row of rows) {
+    const value = pickMappedCsvField(normalizeCsvRow(row), mapping, field)
+    if (value) return value
+  }
+
+  return null
 }
 
 export const TransactionService = {
@@ -98,7 +202,105 @@ export const TransactionService = {
     return updated
   },
 
-  async importMany(userId: string, rows: Array<Record<string, string>>) {
+  async previewImport(
+    userId: string,
+    rows: Array<Record<string, string>>,
+    mappingInput?: unknown
+  ) {
+    const mapping = resolveCsvMapping(rows, mappingInput)
+    const entries = buildCsvEntries(rows, mapping)
+    const hashes = entries
+      .filter((entry) => entry.error === null)
+      .map((entry) => entry.hash)
+    const existingHashes = new Set(
+      await TransactionRepository.findExistingHashes(userId, hashes)
+    )
+
+    const seen = new Set<string>()
+    const previewRows: Array<{
+      row: number
+      date: string | null
+      amount: number | null
+      description: string
+      type: CsvTransactionType
+      status: 'ok' | 'error' | 'duplicate'
+      reason?: string
+    }> = []
+
+    let valid = 0
+    let invalid = 0
+    let duplicates = 0
+
+    for (const entry of entries) {
+      let status: 'ok' | 'error' | 'duplicate' = 'ok'
+      let reason: string | undefined
+
+      if (entry.error) {
+        invalid++
+        status = 'error'
+        reason = entry.error
+      } else if (existingHashes.has(entry.hash)) {
+        duplicates++
+        status = 'duplicate'
+        reason = 'Ya existe en la base de datos (no se importará)'
+      } else if (seen.has(entry.hash)) {
+        duplicates++
+        status = 'duplicate'
+        reason = 'Repetida en el archivo (no se importará)'
+      } else {
+        seen.add(entry.hash)
+        valid++
+      }
+
+      if (previewRows.length < PREVIEW_ROW_LIMIT) {
+        previewRows.push({
+          row: entry.rowNumber,
+          date: entry.date ? formatCsvDate(entry.date) : null,
+          amount: entry.amount,
+          description: entry.description,
+          type: entry.type,
+          status,
+          ...(reason ? { reason } : {}),
+        })
+      }
+    }
+
+    const rawDate = firstMappedValue(rows, mapping, 'date')
+    const rawAmount = firstMappedValue(rows, mapping, 'amount')
+
+    return {
+      total: rows.length,
+      valid,
+      invalid,
+      duplicates,
+      rows: previewRows,
+      truncated: rows.length > PREVIEW_ROW_LIMIT,
+      errors: entries
+        .filter((entry) => entry.error !== null)
+        .slice(0, 10)
+        .map((entry) => ({ row: entry.rowNumber, reason: entry.error as string })),
+      mapping,
+      detected: {
+        date: rawDate && parseCsvDate(rawDate) ? detectCsvDateFormat(rawDate) : null,
+        amount: rawAmount && parseCsvAmount(rawAmount) !== null
+          ? detectCsvAmountFormat(rawAmount)
+          : null,
+      },
+    }
+  },
+
+  async importMany(
+    userId: string,
+    rows: Array<Record<string, string>>,
+    mappingInput?: unknown
+  ) {
+    const mapping = resolveCsvMapping(rows, mappingInput)
+    const entries = buildCsvEntries(rows, mapping)
+
+    const errors = entries
+      .filter((entry) => entry.error !== null)
+      .map((entry) => ({ row: entry.rowNumber, reason: entry.error as string }))
+
     const transactions: Array<{
       userId: string
       date: Date
@@ -111,62 +313,26 @@ export const TransactionService = {
       source: string
     }> = []
 
-    const errors: Array<{ row: number; reason: string }> = []
-    let invalid = 0
+    const seen = new Set<string>()
+    let duplicatesInFile = 0
 
-    for (const [index, row] of rows.entries()) {
-      const rowNumber = index + 2
-      const normalizedRow = normalizeCsvRow(row)
+    for (const entry of entries) {
+      if (entry.error || !entry.date || entry.amount === null) continue
 
-      const rawDate = pickCsvField(normalizedRow, 'date')
-      const rawAmount = pickCsvField(normalizedRow, 'amount')
-      const rawDescription = pickCsvField(normalizedRow, 'description')
-      const rawType = pickCsvField(normalizedRow, 'type')
-
-      if (!rawDate || !rawAmount || !rawDescription) {
-        const missingFields: string[] = []
-        if (!rawDate) missingFields.push('fecha')
-        if (!rawAmount) missingFields.push('importe')
-        if (!rawDescription) missingFields.push('concepto')
-
-        invalid++
-        errors.push({ row: rowNumber, reason: `Faltan campos: ${missingFields.join(', ')}` })
+      if (seen.has(entry.hash)) {
+        duplicatesInFile++
         continue
       }
 
-      const date = parseCsvDate(rawDate)
-      if (!date) {
-        invalid++
-        errors.push({ row: rowNumber, reason: `Fecha inválida: ${rawDate}` })
-        continue
-      }
-
-      const parsedAmount = parseCsvAmount(rawAmount)
-      if (parsedAmount === null || parsedAmount === 0) {
-        invalid++
-        errors.push({ row: rowNumber, reason: `Importe inválido: ${rawAmount}` })
-        continue
-      }
-
-      const explicitType = parseCsvType(rawType)
-      const type: CsvTransactionType = explicitType ?? (parsedAmount >= 0 ? 'income' : 'expense')
-      const amount =
-        type === 'income'
-          ? Math.abs(parsedAmount)
-          : type === 'expense'
-            ? -Math.abs(parsedAmount)
-            : parsedAmount
-
-      const description = rawDescription.trim()
-      const hash = createTransactionHash(formatCsvDate(date), amount, description)
+      seen.add(entry.hash)
 
       transactions.push({
         userId,
-        date,
-        amount,
-        description,
-        type,
-        hash,
+        date: entry.date,
+        amount: entry.amount,
+        description: entry.description,
+        type: entry.type,
+        hash: entry.hash,
         source: 'import',
       })
     }
@@ -214,8 +380,8 @@ export const TransactionService = {
       imported,
       total: rows.length,
       valid: transactions.length,
-      duplicates: transactions.length - imported,
-      invalid,
+      duplicates: duplicatesInFile + (transactions.length - imported),
+      invalid: errors.length,
       errors: errors.slice(0, 10),
     }
   },
