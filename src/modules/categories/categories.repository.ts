@@ -45,6 +45,16 @@ export const CategoryRepository = {
     return prisma.category.findFirst({ where: { id, userId } })
   },
 
+  async findByName(userId: string, name: string, excludeId?: string) {
+    return prisma.category.findFirst({
+      where: {
+        userId,
+        name: { equals: name, mode: 'insensitive' },
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+      },
+    })
+  },
+
   async create(userId: string, dto: CreateCategoryDTO) {
     return prisma.category.create({
       data: {
@@ -63,8 +73,38 @@ export const CategoryRepository = {
   },
 
   async delete(userId: string, id: string) {
-    return prisma.category.delete({
-      where: { id, userId },
+    return prisma.$transaction(async (tx) => {
+      await tx.transaction.updateMany({
+        where: { userId, categoryId: id },
+        data: { categoryId: null },
+      })
+
+      await tx.budget.deleteMany({
+        where: { userId, categoryId: id },
+      })
+
+      const monthlyBudgets = await tx.monthlyBudget.findMany({
+        where: { userId },
+        select: { id: true, categoryAllocations: true },
+      })
+
+      for (const monthly of monthlyBudgets) {
+        const allocations = Array.isArray(monthly.categoryAllocations)
+          ? (monthly.categoryAllocations as Array<Record<string, unknown>>)
+          : []
+        const filtered = allocations.filter((entry) => entry?.categoryId !== id)
+
+        if (filtered.length === allocations.length) continue
+
+        await tx.monthlyBudget.update({
+          where: { id: monthly.id },
+          data: { categoryAllocations: filtered as any },
+        })
+      }
+
+      return tx.category.delete({
+        where: { id, userId },
+      })
     })
   },
 }

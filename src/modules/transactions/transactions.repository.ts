@@ -18,6 +18,7 @@ export type TransactionFilters = {
   limit?: number
   type?: string
   categoryId?: string
+  uncategorized?: string
   accountId?: string
   dateFrom?: string
   dateTo?: string
@@ -41,7 +42,9 @@ export const TransactionRepository = {
     if (filters.type) {
       where.type = filters.type as TransactionType
     }
-    if (filters.categoryId) {
+    if (filters.uncategorized === 'true') {
+      where.categoryId = null
+    } else if (filters.categoryId) {
       where.categoryId = filters.categoryId
     }
     if (filters.accountId) {

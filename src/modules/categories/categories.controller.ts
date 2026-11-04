@@ -29,7 +29,12 @@ export const CategoryController = {
 
   async update(req: Request, res: Response) {
     const { name, type } = req.body
-    const category = await CategoryService.update(req.userId, req.params.id as string, { name, type })
+    const category = await CategoryService.update(req.userId, req.params.id as string, {
+      name,
+      ...(type !== undefined
+        ? { type: requireEnum(type, ['needs', 'leisure', 'savings', 'other'] as const, 'type') }
+        : {}),
+    })
     res.json(category)
   },
 
