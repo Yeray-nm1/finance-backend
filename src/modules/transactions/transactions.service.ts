@@ -1,4 +1,4 @@
-import { TransactionRepository, CreateTransactionDTO, TransactionFilters } from './transactions.repository'
+import { TransactionRepository, CreateTransactionDTO, TransactionFilters, TransferKind } from './transactions.repository'
 import { NotFoundError } from '../../core/errors'
 import { createTransactionHash } from '../../utils/hash'
 import { SubscriptionRepository } from '../subscriptions/subscriptions.repository'
@@ -21,6 +21,7 @@ import {
 export type UpdateTransactionDTO = {
   description?: string
   type?: 'income' | 'expense' | 'transfer'
+  transferKind?: TransferKind
   amount?: number
   date?: string
   accountId?: string | null
@@ -169,6 +170,7 @@ export const TransactionService = {
       amount: dto.amount,
       description: dto.description,
       type: dto.type,
+      transferKind: dto.type === 'transfer' ? (dto.transferKind ?? 'internal') : null,
       accountId,
       categoryId: dto.categoryId || null,
       hash,
@@ -195,6 +197,12 @@ export const TransactionService = {
     }
     if (dto.categoryId !== undefined) data.categoryId = dto.categoryId
     if (dto.isSubscription !== undefined) data.isSubscription = dto.isSubscription
+    if (dto.type !== undefined || dto.transferKind !== undefined) {
+      const nextType = dto.type ?? existing.type
+      data.transferKind = nextType === 'transfer'
+        ? (dto.transferKind ?? existing.transferKind ?? 'internal')
+        : null
+    }
 
     const dateChanged = dto.date !== undefined
     const amountChanged = dto.amount !== undefined
@@ -320,6 +328,7 @@ export const TransactionService = {
       amount: number
       description: string
       type: CsvTransactionType
+      transferKind?: TransferKind | null
       accountId?: string | null
       categoryId?: string | null
       hash: string
@@ -345,6 +354,7 @@ export const TransactionService = {
         amount: entry.amount,
         description: entry.description,
         type: entry.type,
+        transferKind: entry.type === 'transfer' ? 'internal' : null,
         accountId,
         hash: entry.hash,
         source: 'import',

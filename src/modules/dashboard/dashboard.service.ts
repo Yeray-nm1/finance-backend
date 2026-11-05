@@ -71,7 +71,7 @@ export const DashboardService = {
         userId,
         date: { gte: start, lt: end },
       },
-      include: { category: true },
+      include: { category: true, account: true },
     })
 
     let income = 0
@@ -81,7 +81,18 @@ export const DashboardService = {
     for (const t of transactions) {
       if (t.type === 'income') income += t.amount
       else if (t.type === 'expense') expenses += Math.abs(t.amount)
-      else if (t.type === 'transfer') savings += Math.abs(t.amount)
+      else if (t.type === 'transfer') {
+        const kind = t.transferKind ?? 'internal'
+
+        if (kind === 'external') {
+          if (t.amount < 0) expenses += Math.abs(t.amount)
+          else income += t.amount
+        } else if (t.account?.type === 'savings') {
+          savings += t.amount
+        } else {
+          savings -= t.amount
+        }
+      }
     }
 
     const available = income - expenses - savings

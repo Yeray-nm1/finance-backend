@@ -31,13 +31,16 @@ export const TransactionController = {
 
   async create(req: Request, res: Response) {
     requireFields(req.body, 'date', 'amount', 'description', 'type')
-    const { date, amount, description, type, accountId, categoryId, isSubscription } = req.body
+    const { date, amount, description, type, transferKind, accountId, categoryId, isSubscription } = req.body
 
     const transaction = await TransactionService.create(req.userId, {
       date,
       amount: parseFloat(requireField<string>(req.body, 'amount')),
       description,
       type: requireEnum(type, ['income', 'expense', 'transfer'], 'type'),
+      transferKind: transferKind
+        ? requireEnum(String(transferKind), ['internal', 'external'] as const, 'transferKind')
+        : undefined,
       accountId,
       categoryId,
       isSubscription: isSubscription !== undefined ? Boolean(isSubscription) : undefined,
@@ -74,10 +77,13 @@ export const TransactionController = {
   },
 
   async update(req: Request, res: Response) {
-    const { description, type, amount, date, accountId, categoryId, isSubscription } = req.body
+    const { description, type, transferKind, amount, date, accountId, categoryId, isSubscription } = req.body
     const transaction = await TransactionService.update(req.userId, req.params.id as string, {
       description,
       type: type ? String(type) as 'income' | 'expense' | 'transfer' : undefined,
+      transferKind: transferKind
+        ? requireEnum(String(transferKind), ['internal', 'external'] as const, 'transferKind')
+        : undefined,
       amount: amount !== undefined ? parseFloat(String(amount)) : undefined,
       date: date ? String(date) : undefined,
       accountId: accountId !== undefined ? accountId : undefined,

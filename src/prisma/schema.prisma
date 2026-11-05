@@ -43,6 +43,7 @@ model Transaction {
   amount      Float
   description String
   type        TransactionType
+  transferKind TransferKind?
   hash        String
   source      String   @default("manual")
   isSubscription Boolean @default(false)
@@ -175,6 +176,11 @@ enum TransactionType {
   income
   expense
   transfer
+}
+
+enum TransferKind {
+  internal
+  external
 }
 
 enum CategoryType {

@@ -2,12 +2,14 @@ import { prisma } from '../../core/db'
 import { Prisma } from '@prisma/client'
 
 export type TransactionType = 'income' | 'expense' | 'transfer'
+export type TransferKind = 'internal' | 'external'
 
 export type CreateTransactionDTO = {
   date: string
   amount: number
   description: string
   type: TransactionType
+  transferKind?: TransferKind
   accountId?: string
   categoryId?: string
   isSubscription?: boolean
@@ -119,6 +121,7 @@ export const TransactionRepository = {
     amount: number
     description: string
     type: TransactionType
+    transferKind?: TransferKind | null
     accountId?: string | null
     categoryId?: string | null
     hash: string
@@ -133,6 +136,7 @@ export const TransactionRepository = {
     amount: number
     description: string
     type: TransactionType
+    transferKind?: TransferKind | null
     accountId?: string | null
     categoryId?: string | null
     hash: string
@@ -231,6 +235,7 @@ export const TransactionRepository = {
     amount: number
     description: string
     type: TransactionType
+    transferKind: TransferKind | null
     accountId: string | null
     categoryId: string | null
     hash: string
