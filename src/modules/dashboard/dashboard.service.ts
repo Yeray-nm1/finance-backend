@@ -11,6 +11,17 @@ const TYPE_LABELS: Record<string, string> = {
 
 type SubscriptionFrequency = 'weekly' | 'monthly' | 'yearly'
 
+type BudgetSummaryItem = {
+  categoryId: string | null
+  category: string
+  categoryType: CategoryType
+  percentage: number
+  spent: number
+  budgeted: number
+  progress: number
+  status: 'ok' | 'warning' | 'over'
+}
+
 function detectFrequencyName(avgDays: number): SubscriptionFrequency | null {
   if (avgDays >= 4 && avgDays <= 10) return 'weekly'
   if (avgDays >= 25 && avgDays <= 35) return 'monthly'
@@ -29,6 +40,49 @@ function splitEvenly(total: number, count: number): number[] {
   const values = Array.from({ length: count }, () => base)
   values[count - 1] += totalCents - base * count
   return values.map((cents) => cents / 100)
+}
+
+type BalanceTransaction = Pick<Transaction, 'type' | 'amount' | 'transferKind'> & {
+  account?: { type: string } | null
+}
+
+function computeMonthBalance(transactions: BalanceTransaction[]) {
+  let income = 0
+  let expenses = 0
+  let savings = 0
+
+  for (const t of transactions) {
+    if (t.type === 'income') income += t.amount
+    else if (t.type === 'expense') expenses += Math.abs(t.amount)
+    else if (t.type === 'transfer') {
+      const kind = t.transferKind ?? 'internal'
+
+      if (kind === 'external') {
+        if (t.amount < 0) expenses += Math.abs(t.amount)
+        else income += t.amount
+      } else if (t.account?.type === 'savings') {
+        savings += t.amount
+      } else {
+        savings -= t.amount
+      }
+    }
+  }
+
+  const available = income - expenses - savings
+  const balance = income - expenses
+
+  return {
+    income: round2(income),
+    expenses: round2(expenses),
+    savings: round2(savings),
+    available: round2(available),
+    balance: round2(balance),
+  }
+}
+
+function isSpendingTransaction(t: Pick<Transaction, 'type' | 'amount' | 'transferKind'>): boolean {
+  if (t.type === 'expense') return true
+  return t.type === 'transfer' && (t.transferKind ?? 'internal') === 'external' && t.amount < 0
 }
 
 export const DashboardService = {
@@ -74,40 +128,94 @@ export const DashboardService = {
       include: { category: true, account: true },
     })
 
-    let income = 0
-    let expenses = 0
-    let savings = 0
+    return computeMonthBalance(transactions)
+  },
+
+  async getCategorySpending(userId: string, year: number, month: number) {
+    const start = new Date(year, month - 1, 1)
+    const end = new Date(year, month, 1)
+
+    const transactions = await prisma.transaction.findMany({
+      where: { userId, date: { gte: start, lt: end } },
+      include: { category: true },
+    })
+
+    const byCategory = new Map<string, {
+      categoryId: string | null
+      category: string
+      categoryType: CategoryType | null
+      amount: number
+    }>()
 
     for (const t of transactions) {
-      if (t.type === 'income') income += t.amount
-      else if (t.type === 'expense') expenses += Math.abs(t.amount)
-      else if (t.type === 'transfer') {
-        const kind = t.transferKind ?? 'internal'
+      if (!isSpendingTransaction(t)) continue
 
-        if (kind === 'external') {
-          if (t.amount < 0) expenses += Math.abs(t.amount)
-          else income += t.amount
-        } else if (t.account?.type === 'savings') {
-          savings += t.amount
-        } else {
-          savings -= t.amount
-        }
+      const amount = Math.abs(t.amount)
+      if (amount === 0) continue
+
+      const key = t.categoryId ?? '__uncategorized__'
+      const current = byCategory.get(key)
+
+      if (current) {
+        current.amount += amount
+      } else {
+        byCategory.set(key, {
+          categoryId: t.categoryId ?? null,
+          category: t.category?.name ?? 'Sin categoría',
+          categoryType: t.category?.type ?? null,
+          amount,
+        })
       }
     }
 
-    const available = income - expenses - savings
-    const balance = income - expenses
+    const total = Array.from(byCategory.values()).reduce((sum, item) => sum + item.amount, 0)
 
-    return {
-      income: round2(income),
-      expenses: round2(expenses),
-      savings: round2(savings),
-      available: round2(available),
-      balance: round2(balance),
-    }
+    return Array.from(byCategory.values())
+      .map((item) => ({
+        ...item,
+        amount: round2(item.amount),
+        percentage: total > 0 ? round2((item.amount / total) * 100) : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount)
   },
 
-  async getBudgetBudgets(userId: string, year: number, month: number) {
+  async getMonthlyEvolution(userId: string, year: number, month: number, months = 6) {
+    const ranges = Array.from({ length: months }, (_, index) => {
+      const offset = months - 1 - index
+      const start = new Date(year, month - 1 - offset, 1)
+      const end = new Date(start.getFullYear(), start.getMonth() + 1, 1)
+      return {
+        year: start.getFullYear(),
+        month: start.getMonth() + 1,
+        start,
+        end,
+      }
+    })
+
+    const first = ranges[0]
+    const last = ranges[ranges.length - 1]
+
+    const transactions = await prisma.transaction.findMany({
+      where: { userId, date: { gte: first.start, lt: last.end } },
+      include: { account: true },
+    })
+
+    return ranges.map((range) => {
+      const monthTransactions = transactions.filter(
+        (t) => t.date >= range.start && t.date < range.end,
+      )
+      const balance = computeMonthBalance(monthTransactions)
+
+      return {
+        year: range.year,
+        month: range.month,
+        income: balance.income,
+        expenses: balance.expenses,
+      }
+    })
+  },
+
+  async getBudgetBudgets(userId: string, year: number, month: number): Promise<BudgetSummaryItem[]> {
     const start = new Date(year, month - 1, 1)
     const end = new Date(year, month, 1)
 
@@ -142,12 +250,13 @@ export const DashboardService = {
         }
       }
 
-      return allocations.flatMap((a) => {
+      return allocations.flatMap((a): BudgetSummaryItem[] => {
         const typeAmount = monthlyBudget.totalIncome * (a.percentage / 100)
         const typeCats = categoriesByType[a.type] ?? []
 
         if (typeCats.length === 0) {
           return [{
+            categoryId: null,
             category: TYPE_LABELS[a.type] ?? a.type,
             categoryType: a.type,
             percentage: a.percentage,
@@ -172,6 +281,7 @@ export const DashboardService = {
             : progress > 100 ? 'over' as const : progress > 80 ? 'warning' as const : 'ok' as const
 
           return {
+            categoryId: cat.id,
             category: cat.name,
             categoryType: a.type,
             percentage: typeAmount > 0 ? round2((budgeted / typeAmount) * 100) : 0,
@@ -217,6 +327,7 @@ export const DashboardService = {
       const status = progress > 100 ? 'over' : progress > 80 ? 'warning' : 'ok'
 
       return {
+        categoryId: b.categoryId,
         category: b.category.name,
         categoryType: b.category.type,
         percentage: b.percentage,
@@ -400,12 +511,22 @@ export const DashboardService = {
   },
 
   async getDashboard(userId: string, year: number, month: number) {
-    const [balance, budgets, recurring, transactions, vsPreviousMonth] = await Promise.all([
+    const [
+      balance,
+      budgets,
+      recurring,
+      transactions,
+      vsPreviousMonth,
+      categorySpending,
+      monthlyEvolution,
+    ] = await Promise.all([
       DashboardService.getMonthOverview(userId, year, month),
       DashboardService.getBudgetBudgets(userId, year, month),
       DashboardService.getRecurring(userId, year, month),
       DashboardService.getRecentTransactions(userId, year, month),
       DashboardService.getVsPreviousMonth(userId, year, month),
+      DashboardService.getCategorySpending(userId, year, month),
+      DashboardService.getMonthlyEvolution(userId, year, month),
     ])
 
     return {
@@ -413,6 +534,8 @@ export const DashboardService = {
       budgets,
       recurring,
       transactions,
+      categorySpending,
+      monthlyEvolution,
     }
   },
 }
