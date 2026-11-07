@@ -7,6 +7,10 @@ export type CreateSubscriptionDTO = {
   matchDescriptions?: string[]
 }
 
+export type UpdateSubscriptionDTO = Partial<CreateSubscriptionDTO> & {
+  active?: boolean
+}
+
 export const SubscriptionRepository = {
   async findAll(userId: string) {
     const subs = await prisma.subscription.findMany({
@@ -27,10 +31,18 @@ export const SubscriptionRepository = {
           orderBy: { createdAt: 'desc' },
         })
 
+        const recentTransactions = await prisma.transaction.findMany({
+          where: { userId, subscriptionId: sub.id },
+          orderBy: { date: 'desc' },
+          take: 6,
+          select: { id: true, amount: true, date: true, description: true },
+        })
+
         return {
           ...sub,
           lastTransaction: lastTransaction ?? undefined,
           priceChanges: priceChanges.length > 0 ? priceChanges : undefined,
+          recentTransactions,
         }
       })
     )
@@ -53,10 +65,18 @@ export const SubscriptionRepository = {
       orderBy: { createdAt: 'desc' },
     })
 
+    const recentTransactions = await prisma.transaction.findMany({
+      where: { userId, subscriptionId: sub.id },
+      orderBy: { date: 'desc' },
+      take: 6,
+      select: { id: true, amount: true, date: true, description: true },
+    })
+
     return {
       ...sub,
       lastTransaction: lastTransaction ?? undefined,
       priceChanges: priceChanges.length > 0 ? priceChanges : undefined,
+      recentTransactions,
     }
   },
 

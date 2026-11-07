@@ -5,12 +5,13 @@ import { BadRequestError } from '../../core/errors'
 
 export const TransactionController = {
   async getAll(req: Request, res: Response) {
-    const { page, limit, type, categoryId, accountId, dateFrom, dateTo, search, isSubscription, subscriptionIds, sortBy, sortOrder } = req.query
+    const { page, limit, type, categoryId, uncategorized, accountId, dateFrom, dateTo, search, isSubscription, subscriptionIds, sortBy, sortOrder } = req.query
     const result = await TransactionService.getAll(req.userId, {
       page: page ? parseInt(page as string) : undefined,
       limit: limit ? parseInt(limit as string) : undefined,
       type: type as string | undefined,
       categoryId: categoryId as string | undefined,
+      uncategorized: uncategorized as string | undefined,
       accountId: accountId as string | undefined,
       dateFrom: dateFrom as string | undefined,
       dateTo: dateTo as string | undefined,
@@ -30,19 +31,33 @@ export const TransactionController = {
 
   async create(req: Request, res: Response) {
     requireFields(req.body, 'date', 'amount', 'description', 'type')
-    const { date, amount, description, type, accountId, categoryId, isSubscription } = req.body
+    const { date, amount, description, type, transferKind, accountId, categoryId, isSubscription } = req.body
 
     const transaction = await TransactionService.create(req.userId, {
       date,
       amount: parseFloat(requireField<string>(req.body, 'amount')),
       description,
       type: requireEnum(type, ['income', 'expense', 'transfer'], 'type'),
+      transferKind: transferKind
+        ? requireEnum(String(transferKind), ['internal', 'external'] as const, 'transferKind')
+        : undefined,
       accountId,
       categoryId,
       isSubscription: isSubscription !== undefined ? Boolean(isSubscription) : undefined,
     })
 
     res.status(201).json(transaction)
+  },
+
+  async previewCsv(req: Request, res: Response) {
+    const rows = requireField<Array<Record<string, string>>>(req.body, 'rows')
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new BadRequestError('rows must be a non-empty array')
+    }
+
+    const result = await TransactionService.previewImport(req.userId, rows, req.body.mapping)
+    res.json(result)
   },
 
   async importCsv(req: Request, res: Response) {
@@ -52,15 +67,23 @@ export const TransactionController = {
       throw new BadRequestError('rows must be a non-empty array')
     }
 
-    const result = await TransactionService.importMany(req.userId, rows)
+    const result = await TransactionService.importMany(
+      req.userId,
+      rows,
+      req.body.mapping,
+      req.body.accountId
+    )
     res.status(201).json(result)
   },
 
   async update(req: Request, res: Response) {
-    const { description, type, amount, date, accountId, categoryId, isSubscription } = req.body
+    const { description, type, transferKind, amount, date, accountId, categoryId, isSubscription } = req.body
     const transaction = await TransactionService.update(req.userId, req.params.id as string, {
       description,
       type: type ? String(type) as 'income' | 'expense' | 'transfer' : undefined,
+      transferKind: transferKind
+        ? requireEnum(String(transferKind), ['internal', 'external'] as const, 'transferKind')
+        : undefined,
       amount: amount !== undefined ? parseFloat(String(amount)) : undefined,
       date: date ? String(date) : undefined,
       accountId: accountId !== undefined ? accountId : undefined,
@@ -86,6 +109,30 @@ export const TransactionController = {
     }
     const result = await TransactionService.deleteMany(req.userId, idArray)
     res.json({ deleted: result.count })
+  },
+
+  async updateMany(req: Request, res: Response) {
+    const { ids, categoryId, accountId } = req.body
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestError('ids must be a non-empty array')
+    }
+    if (categoryId !== undefined && categoryId !== null && typeof categoryId !== 'string') {
+      throw new BadRequestError('categoryId must be a string or null')
+    }
+    if (accountId !== undefined && accountId !== null && typeof accountId !== 'string') {
+      throw new BadRequestError('accountId must be a string or null')
+    }
+    if (categoryId === undefined && accountId === undefined) {
+      throw new BadRequestError('categoryId or accountId is required')
+    }
+
+    const result = await TransactionService.updateManyFields(
+      req.userId,
+      ids.map(String),
+      { categoryId, accountId }
+    )
+    res.json({ updated: result.count })
   },
 
   async deleteAllImported(req: Request, res: Response) {

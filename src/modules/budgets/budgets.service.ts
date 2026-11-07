@@ -2,6 +2,77 @@ import { BudgetRepository } from './budgets.repository'
 import { NotFoundError, BadRequestError } from '../../core/errors'
 import { normalizeIncomeDescription } from '../../utils/normalize'
 
+const BUDGET_TYPES = ['needs', 'leisure', 'savings', 'other']
+
+interface TypeAllocationInput {
+  type: string
+  percentage: number
+}
+
+interface CategoryAllocationInput {
+  categoryId: string
+  amount: number
+}
+
+function roundCurrency(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100
+}
+
+function validateTypeAllocations(value: unknown): TypeAllocationInput[] {
+  if (!Array.isArray(value) || value.length !== 4) {
+    throw new BadRequestError('typeAllocations must contain exactly 4 entries')
+  }
+
+  const allocations = value.map((item) => {
+    const entry = item as TypeAllocationInput
+    if (
+      typeof entry?.type !== 'string' ||
+      !BUDGET_TYPES.includes(entry.type) ||
+      typeof entry?.percentage !== 'number' ||
+      !Number.isFinite(entry.percentage) ||
+      entry.percentage < 0 ||
+      entry.percentage > 100
+    ) {
+      throw new BadRequestError('typeAllocations contains an invalid entry')
+    }
+    return { type: entry.type, percentage: entry.percentage }
+  })
+
+  const total = roundCurrency(allocations.reduce((sum, a) => sum + a.percentage, 0))
+  if (Math.abs(total - 100) > 0.15) {
+    throw new BadRequestError('Los porcentajes de los tipos deben sumar 100%')
+  }
+
+  return allocations
+}
+
+function validateCategoryAllocations(value: unknown): CategoryAllocationInput[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) {
+    throw new BadRequestError('categoryAllocations must be an array')
+  }
+
+  const seen = new Set<string>()
+  return value.map((item) => {
+    const entry = item as CategoryAllocationInput
+    if (typeof entry?.categoryId !== 'string' || entry.categoryId.length === 0) {
+      throw new BadRequestError('categoryAllocations contains an invalid category')
+    }
+    if (
+      typeof entry?.amount !== 'number' ||
+      !Number.isFinite(entry.amount) ||
+      entry.amount < 0
+    ) {
+      throw new BadRequestError('categoryAllocations contains an invalid amount')
+    }
+    if (seen.has(entry.categoryId)) {
+      throw new BadRequestError('categoryAllocations contains duplicated categories')
+    }
+    seen.add(entry.categoryId)
+    return { categoryId: entry.categoryId, amount: roundCurrency(entry.amount) }
+  })
+}
+
 export const BudgetService = {
   async list(userId: string, month?: number, year?: number) {
     const now = new Date()
@@ -51,17 +122,51 @@ export const BudgetService = {
     return BudgetRepository.findMonthly(userId, month, year)
   },
 
+  async getAvailableMonths(userId: string) {
+    return BudgetRepository.findMonthlyMonths(userId)
+  },
+
   async upsertMonthly(
     userId: string, month: number, year: number,
-    totalIncome: number, typeAllocations: unknown,
+    totalIncome: number, typeAllocations: unknown, categoryAllocations: unknown,
   ) {
     if (typeof totalIncome !== 'number' || totalIncome < 0) {
       throw new BadRequestError('totalIncome must be a non-negative number')
     }
-    if (!Array.isArray(typeAllocations) || typeAllocations.length !== 4) {
-      throw new BadRequestError('typeAllocations must contain exactly 4 entries')
+    const allocations = validateTypeAllocations(typeAllocations)
+    const categoryEntries = validateCategoryAllocations(categoryAllocations)
+
+    const categories = await BudgetRepository.findCategories(userId)
+    const typeByCategory = new Map(categories.map((c) => [c.id, c.type]))
+
+    for (const entry of categoryEntries) {
+      if (!typeByCategory.has(entry.categoryId)) {
+        throw new BadRequestError('categoryAllocations contains an unknown category')
+      }
     }
-    return BudgetRepository.upsertMonthly(userId, month, year, totalIncome, typeAllocations)
+
+    for (const typeAllocation of allocations) {
+      const typeCategories = categories.filter((c) => c.type === typeAllocation.type)
+      if (typeCategories.length === 0) continue
+
+      const expected = roundCurrency(totalIncome * (typeAllocation.percentage / 100))
+      const typeIds = new Set(typeCategories.map((c) => c.id))
+      const allocated = roundCurrency(
+        categoryEntries
+          .filter((entry) => typeIds.has(entry.categoryId))
+          .reduce((sum, entry) => sum + entry.amount, 0)
+      )
+
+      if (Math.abs(allocated - expected) > 0.02) {
+        throw new BadRequestError(
+          `El reparto de ${typeAllocation.type} suma ${allocated} € y debe sumar ${expected} €`
+        )
+      }
+    }
+
+    return BudgetRepository.upsertMonthly(
+      userId, month, year, totalIncome, allocations, categoryEntries
+    )
   },
 
   async calculateIncome(userId: string, month?: number, year?: number) {

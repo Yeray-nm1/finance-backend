@@ -15,6 +15,10 @@ export type CsvField =
   | 'description'
   | 'type'
 
+export const CSV_FIELDS: CsvField[] = ['date', 'amount', 'description', 'type']
+
+export type CsvMapping = Record<CsvField, string | null>
+
 const FIELD_ALIASES: Record<CsvField, string[]> = {
   date: ['date', 'fecha', 'fechavalor', 'fechaoperacion', 'fechacontable'],
   amount: ['amount', 'importe', 'cantidad', 'valor', 'importeeur'],
@@ -71,6 +75,127 @@ export function pickCsvField(row: Record<string, string>, field: CsvField): stri
   }
 
   return undefined
+}
+
+/**
+ * Sugiere una columna para cada campo a partir de las cabeceras del CSV.
+ * Devuelve el nombre original de la cabecera (no el normalizado).
+ */
+export function suggestCsvMapping(headers: readonly string[]): CsvMapping {
+  const keys = headers.map((header) => ({
+    original: header,
+    key: normalizeCsvKey(header),
+  }))
+
+  const mapping = {} as CsvMapping
+
+  for (const field of CSV_FIELDS) {
+    const match = FIELD_ALIASES[field]
+      .map((alias) => keys.find((header) => header.key === alias))
+      .find((header) => header !== undefined)
+
+    mapping[field] = match?.original ?? null
+  }
+
+  return mapping
+}
+
+/**
+ * Resuelve el mapeo final: lo enviado por el cliente tiene prioridad
+ * (incluido `null` para descartar una columna); si no se envía nada,
+ * se usan los alias automáticos.
+ */
+export function resolveCsvMapping(rows: Array<Record<string, unknown>>, value: unknown): CsvMapping {
+  const suggested = suggestCsvMapping(Object.keys(rows[0] ?? {}))
+
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return suggested
+  }
+
+  const input = value as Record<string, unknown>
+  const mapping = {} as CsvMapping
+
+  for (const field of CSV_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(input, field)) {
+      mapping[field] = suggested[field]
+      continue
+    }
+
+    const column = input[field]
+    mapping[field] = typeof column === 'string' && column.trim() !== '' ? column.trim() : null
+  }
+
+  return mapping
+}
+
+export function pickMappedCsvField(
+  row: Record<string, string>,
+  mapping: CsvMapping,
+  field: CsvField
+): string | undefined {
+  const column = mapping[field]
+
+  if (column) {
+    const value = row[normalizeCsvKey(column)]
+    return value !== undefined && value.trim() !== '' ? value.trim() : undefined
+  }
+
+  return undefined
+}
+
+export function detectCsvDateFormat(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null
+
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) ? 'Serial de Excel' : null
+  }
+
+  const value = String(raw).trim()
+  if (!value) return null
+
+  if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/.test(value)) return 'AAAA-MM-DD'
+  if (/^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}/.test(value)) return 'DD/MM/AAAA'
+  if (/^\d{8}$/.test(value)) return 'AAAAMMDD'
+  if (/^\d{5}$/.test(value)) return 'Serial de Excel'
+  return 'Formato interpretado'
+}
+
+export function detectCsvAmountFormat(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null
+  if (typeof raw === 'number') return Number.isFinite(raw) ? 'Número' : null
+
+  const cleaned = String(raw).trim().replace(/[^\d.,]/g, '')
+  if (!cleaned || !/\d/.test(cleaned)) return null
+
+  const dotCount = (cleaned.match(/\./g) ?? []).length
+  const commaCount = (cleaned.match(/,/g) ?? []).length
+
+  if (dotCount > 0 && commaCount > 0) {
+    return cleaned.lastIndexOf('.') > cleaned.lastIndexOf(',')
+      ? '1,234.56'
+      : '1.234,56'
+  }
+
+  if (commaCount > 0) {
+    const lastGroup = cleaned.split(',').pop() ?? ''
+    return commaCount > 1 && lastGroup.length === 3
+      ? '1.234'
+      : '1234,56'
+  }
+
+  if (dotCount > 0) {
+    const parts = cleaned.split('.')
+    const lastGroup = parts[parts.length - 1]
+    const firstGroup = parts[0]
+    const looksLikeThousands =
+      dotCount > 1
+        ? lastGroup.length === 3
+        : lastGroup.length === 3 && firstGroup !== '0' && firstGroup.length <= 3
+
+    return looksLikeThousands ? '1.234' : '1234.56'
+  }
+
+  return 'Sin separador de miles'
 }
 
 export function parseCsvType(raw: unknown): CsvTransactionType | null {

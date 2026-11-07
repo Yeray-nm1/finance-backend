@@ -43,6 +43,7 @@ model Transaction {
   amount      Float
   description String
   type        TransactionType
+  transferKind TransferKind?
   hash        String
   source      String   @default("manual")
   isSubscription Boolean @default(false)
@@ -100,6 +101,7 @@ model MonthlyBudget {
   year            Int
   totalIncome     Float
   typeAllocations Json
+  categoryAllocations Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -116,6 +118,7 @@ model Subscription {
   name        String
   amount      Float
   frequency   SubscriptionFrequency
+  active      Boolean  @default(true)
 
   matchDescriptions String[]  @default([])
   amountTolerance   Float     @default(10.0)
@@ -174,6 +177,11 @@ enum TransactionType {
   income
   expense
   transfer
+}
+
+enum TransferKind {
+  internal
+  external
 }
 
 enum CategoryType {
