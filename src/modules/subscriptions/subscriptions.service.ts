@@ -1,4 +1,4 @@
-import { SubscriptionRepository, CreateSubscriptionDTO } from './subscriptions.repository'
+import { SubscriptionRepository, CreateSubscriptionDTO, UpdateSubscriptionDTO } from './subscriptions.repository'
 import { TransactionRepository } from '../transactions/transactions.repository'
 import { NotFoundError, BadRequestError } from '../../core/errors'
 import { normalizeDescription } from '../../utils/normalize'
@@ -92,7 +92,7 @@ export const SubscriptionService = {
     )
   },
 
-  async update(userId: string, id: string, dto: Partial<CreateSubscriptionDTO>) {
+  async update(userId: string, id: string, dto: UpdateSubscriptionDTO) {
     await SubscriptionService.getById(userId, id)
 
     if (dto.name !== undefined) {

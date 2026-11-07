@@ -1,8 +1,9 @@
 import { TransactionRepository, CreateTransactionDTO, TransactionFilters, TransferKind } from './transactions.repository'
-import { NotFoundError } from '../../core/errors'
+import { NotFoundError, BadRequestError } from '../../core/errors'
 import { createTransactionHash } from '../../utils/hash'
 import { SubscriptionRepository } from '../subscriptions/subscriptions.repository'
 import { AccountService } from '../accounts/accounts.service'
+import { CategoryService } from '../categories/categories.service'
 import { normalizeDescription } from '../../utils/normalize'
 import {
   detectCsvAmountFormat,
@@ -152,6 +153,41 @@ export const TransactionService = {
 
   async deleteMany(userId: string, ids: string[]) {
     return TransactionRepository.deleteMany(userId, ids)
+  },
+
+  async updateManyFields(
+    userId: string,
+    ids: string[],
+    fields: { categoryId?: string | null; accountId?: string | null }
+  ) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestError('Debes seleccionar al menos una transacción')
+    }
+
+    const hasCategory = fields.categoryId !== undefined
+    const hasAccount = fields.accountId !== undefined
+
+    if (!hasCategory && !hasAccount) {
+      throw new BadRequestError('Debes indicar una categoría o una cuenta')
+    }
+
+    const data: { categoryId?: string | null; accountId?: string | null } = {}
+
+    if (hasCategory) {
+      if (fields.categoryId !== null) {
+        await CategoryService.getById(userId, fields.categoryId as string)
+      }
+      data.categoryId = fields.categoryId as string | null
+    }
+
+    if (hasAccount) {
+      if (fields.accountId !== null) {
+        await AccountService.getOwnedId(userId, fields.accountId as string)
+      }
+      data.accountId = fields.accountId as string | null
+    }
+
+    return TransactionRepository.updateMany(userId, ids, data)
   },
 
   async deleteAllImported(userId: string) {

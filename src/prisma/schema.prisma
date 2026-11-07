@@ -118,6 +118,7 @@ model Subscription {
   name        String
   amount      Float
   frequency   SubscriptionFrequency
+  active      Boolean  @default(true)
 
   matchDescriptions String[]  @default([])
   amountTolerance   Float     @default(10.0)

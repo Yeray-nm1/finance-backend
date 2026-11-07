@@ -358,6 +358,7 @@ export const DashboardService = {
       where: { userId },
       orderBy: { amount: 'desc' },
     })
+    const activeSubscriptions = subscriptions.filter((s) => s.active)
 
     const groups = await prisma.transaction.findMany({
       where: { userId, type: 'expense' },
@@ -419,7 +420,7 @@ export const DashboardService = {
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1)
 
     const manual = await Promise.all(
-      subscriptions.map(async (s) => {
+      activeSubscriptions.map(async (s) => {
         let lastTx = await prisma.transaction.findFirst({
           where: { userId, subscriptionId: s.id },
           orderBy: { date: 'desc' },

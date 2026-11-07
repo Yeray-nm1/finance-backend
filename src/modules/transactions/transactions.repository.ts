@@ -212,6 +212,20 @@ export const TransactionRepository = {
     })
   },
 
+  async updateMany(
+    userId: string,
+    ids: string[],
+    data: { categoryId?: string | null; accountId?: string | null }
+  ) {
+    return prisma.transaction.updateMany({
+      where: {
+        userId,
+        id: { in: ids },
+      },
+      data,
+    })
+  },
+
   async deleteAllImported(userId: string) {
     return prisma.transaction.deleteMany({
       where: { userId, source: 'import' }

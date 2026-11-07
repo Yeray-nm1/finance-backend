@@ -111,6 +111,30 @@ export const TransactionController = {
     res.json({ deleted: result.count })
   },
 
+  async updateMany(req: Request, res: Response) {
+    const { ids, categoryId, accountId } = req.body
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestError('ids must be a non-empty array')
+    }
+    if (categoryId !== undefined && categoryId !== null && typeof categoryId !== 'string') {
+      throw new BadRequestError('categoryId must be a string or null')
+    }
+    if (accountId !== undefined && accountId !== null && typeof accountId !== 'string') {
+      throw new BadRequestError('accountId must be a string or null')
+    }
+    if (categoryId === undefined && accountId === undefined) {
+      throw new BadRequestError('categoryId or accountId is required')
+    }
+
+    const result = await TransactionService.updateManyFields(
+      req.userId,
+      ids.map(String),
+      { categoryId, accountId }
+    )
+    res.json({ updated: result.count })
+  },
+
   async deleteAllImported(req: Request, res: Response) {
     const result = await TransactionService.deleteAllImported(req.userId)
     res.json({ deleted: result.count })
