@@ -49,4 +49,11 @@ export const UserRepository = {
   async findById(id: string) {
     return prisma.user.findUnique({ where: { id } })
   },
+
+  async updatePassword(id: string, hashedPassword: string) {
+    return prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+    })
+  },
 }
