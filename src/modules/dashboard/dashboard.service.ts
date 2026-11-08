@@ -1,5 +1,5 @@
 import { prisma } from '../../core/db'
-import { Transaction, Budget, Subscription, CategoryType } from '@prisma/client'
+import { Transaction, CategoryType } from '@prisma/client'
 import { normalizeDescription } from '../../utils/normalize'
 
 const TYPE_LABELS: Record<string, string> = {

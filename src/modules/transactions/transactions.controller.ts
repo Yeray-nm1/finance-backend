@@ -31,7 +31,7 @@ export const TransactionController = {
 
   async create(req: Request, res: Response) {
     requireFields(req.body, 'date', 'amount', 'description', 'type')
-    const { date, amount, description, type, transferKind, accountId, categoryId, isSubscription } = req.body
+    const { date, description, type, transferKind, accountId, categoryId, isSubscription } = req.body
 
     const transaction = await TransactionService.create(req.userId, {
       date,

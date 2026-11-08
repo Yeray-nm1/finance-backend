@@ -1,4 +1,3 @@
-import { Request } from 'express'
 import { BadRequestError } from '../core/errors'
 
 export function requireFields(body: Record<string, unknown>, ...fields: string[]) {

@@ -1,5 +1,4 @@
 import { prisma } from '../../core/db'
-import { NotFoundError, ConflictError, BadRequestError } from '../../core/errors'
 
 export type RegisterDTO = {
   email: string

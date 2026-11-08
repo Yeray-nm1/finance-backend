@@ -1,4 +1,5 @@
 import { prisma } from '../../core/db'
+import { Prisma } from '@prisma/client'
 
 export type CategoryType = 'needs' | 'leisure' | 'savings' | 'other'
 
@@ -98,7 +99,7 @@ export const CategoryRepository = {
 
         await tx.monthlyBudget.update({
           where: { id: monthly.id },
-          data: { categoryAllocations: filtered as any },
+          data: { categoryAllocations: filtered as Prisma.InputJsonValue },
         })
       }
 

@@ -1,4 +1,5 @@
 import { prisma } from '../../core/db'
+import { Prisma } from '@prisma/client'
 
 export const BudgetRepository = {
   async findByPeriod(userId: string, month: number, year: number) {
@@ -63,13 +64,13 @@ export const BudgetRepository = {
       where: { userId_month_year: { userId, month, year } },
       create: {
         userId, month, year, totalIncome,
-        typeAllocations: typeAllocations as any,
-        categoryAllocations: categoryAllocations as any,
+        typeAllocations: typeAllocations as Prisma.InputJsonValue,
+        categoryAllocations: categoryAllocations as Prisma.InputJsonValue,
       },
       update: {
         totalIncome,
-        typeAllocations: typeAllocations as any,
-        categoryAllocations: categoryAllocations as any,
+        typeAllocations: typeAllocations as Prisma.InputJsonValue,
+        categoryAllocations: categoryAllocations as Prisma.InputJsonValue,
       },
     })
   },
