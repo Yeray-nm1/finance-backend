@@ -42,6 +42,21 @@ interface CsvEntry {
 
 const PREVIEW_ROW_LIMIT = 200
 
+function validateAmount(value: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) {
+    throw new BadRequestError('El importe debe ser un número distinto de cero')
+  }
+  return value
+}
+
+function validateDate(value: string): Date {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestError('La fecha no es válida')
+  }
+  return date
+}
+
 function buildCsvEntries(
   rows: Array<Record<string, string>>,
   mapping: CsvMapping
@@ -195,20 +210,25 @@ export const TransactionService = {
   },
 
   async create(userId: string, dto: CreateTransactionDTO) {
-    const hash = createTransactionHash(dto.date, dto.amount, dto.description)
+    const amount = validateAmount(dto.amount)
+    const date = validateDate(dto.date)
+    const hash = createTransactionHash(dto.date, amount, dto.description)
     const accountId = dto.accountId
       ? await AccountService.getOwnedId(userId, dto.accountId)
+      : null
+    const categoryId = dto.categoryId
+      ? (await CategoryService.getById(userId, dto.categoryId)).id
       : null
 
     return TransactionRepository.create({
       userId,
-      date: new Date(dto.date),
-      amount: dto.amount,
+      date,
+      amount,
       description: dto.description,
       type: dto.type,
       transferKind: dto.type === 'transfer' ? (dto.transferKind ?? 'internal') : null,
       accountId,
-      categoryId: dto.categoryId || null,
+      categoryId,
       hash,
       isSubscription: dto.isSubscription ?? false,
     })
@@ -224,14 +244,18 @@ export const TransactionService = {
 
     if (dto.description !== undefined) data.description = dto.description
     if (dto.type !== undefined) data.type = dto.type
-    if (dto.amount !== undefined) data.amount = dto.amount
-    if (dto.date !== undefined) data.date = new Date(dto.date)
+    if (dto.amount !== undefined) data.amount = validateAmount(dto.amount)
+    if (dto.date !== undefined) data.date = validateDate(dto.date)
     if (dto.accountId !== undefined) {
       data.accountId = dto.accountId
         ? await AccountService.getOwnedId(userId, dto.accountId)
         : null
     }
-    if (dto.categoryId !== undefined) data.categoryId = dto.categoryId
+    if (dto.categoryId !== undefined) {
+      data.categoryId = dto.categoryId
+        ? (await CategoryService.getById(userId, dto.categoryId)).id
+        : null
+    }
     if (dto.isSubscription !== undefined) data.isSubscription = dto.isSubscription
     if (dto.type !== undefined || dto.transferKind !== undefined) {
       const nextType = dto.type ?? existing.type

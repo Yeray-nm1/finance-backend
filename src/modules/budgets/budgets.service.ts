@@ -1,6 +1,7 @@
 import { BudgetRepository } from './budgets.repository'
 import { NotFoundError, BadRequestError } from '../../core/errors'
 import { normalizeIncomeDescription } from '../../utils/normalize'
+import { CategoryService } from '../categories/categories.service'
 
 const BUDGET_TYPES = ['needs', 'leisure', 'savings', 'other']
 
@@ -82,9 +83,11 @@ export const BudgetService = {
   },
 
   async create(userId: string, categoryId: string, percentage: number) {
-    if (!percentage || percentage <= 0 || percentage > 100) {
+    if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100) {
       throw new BadRequestError('El porcentaje debe ser mayor que 0 y menor o igual que 100')
     }
+
+    await CategoryService.getById(userId, categoryId)
 
     const now = new Date()
     const month = now.getMonth() + 1
@@ -99,8 +102,15 @@ export const BudgetService = {
   },
 
   async update(userId: string, id: string, data: { categoryId?: string; percentage?: number }) {
-    if (data.percentage !== undefined && (data.percentage <= 0 || data.percentage > 100)) {
+    if (
+      data.percentage !== undefined &&
+      (!Number.isFinite(data.percentage) || data.percentage <= 0 || data.percentage > 100)
+    ) {
       throw new BadRequestError('El porcentaje debe ser mayor que 0 y menor o igual que 100')
+    }
+
+    if (data.categoryId !== undefined) {
+      await CategoryService.getById(userId, data.categoryId)
     }
 
     const result = await BudgetRepository.update(userId, id, data)

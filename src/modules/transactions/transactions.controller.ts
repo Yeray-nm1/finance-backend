@@ -81,7 +81,9 @@ export const TransactionController = {
     const { description, type, transferKind, amount, date, accountId, categoryId, isSubscription } = req.body
     const transaction = await TransactionService.update(req.userId, req.params.id as string, {
       description,
-      type: type ? String(type) as 'income' | 'expense' | 'transfer' : undefined,
+      type: type
+        ? requireEnum(String(type), ['income', 'expense', 'transfer'] as const, 'type')
+        : undefined,
       transferKind: transferKind
         ? requireEnum(String(transferKind), ['internal', 'external'] as const, 'transferKind')
         : undefined,
