@@ -5,11 +5,12 @@ import { BadRequestError } from '../../core/errors'
 
 export const TransactionController = {
   async getAll(req: Request, res: Response) {
-    const { page, limit, type, categoryId, uncategorized, accountId, dateFrom, dateTo, search, isSubscription, subscriptionIds, sortBy, sortOrder } = req.query
+    const { page, limit, type, flow, categoryId, uncategorized, accountId, dateFrom, dateTo, search, isSubscription, subscriptionIds, sortBy, sortOrder } = req.query
     const result = await TransactionService.getAll(req.userId, {
       page: page ? parseInt(page as string) : undefined,
       limit: limit ? parseInt(limit as string) : undefined,
       type: type as string | undefined,
+      flow: flow as string | undefined,
       categoryId: categoryId as string | undefined,
       uncategorized: uncategorized as string | undefined,
       accountId: accountId as string | undefined,

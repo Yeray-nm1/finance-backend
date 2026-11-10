@@ -19,6 +19,7 @@ export type TransactionFilters = {
   page?: number
   limit?: number
   type?: string
+  flow?: string
   categoryId?: string
   uncategorized?: string
   accountId?: string
@@ -41,7 +42,23 @@ export const TransactionRepository = {
 
     const where: Prisma.TransactionWhereInput = { userId }
 
-    if (filters.type) {
+    if (filters.flow === 'expense') {
+      where.OR = [
+        { type: 'expense' },
+        { type: 'transfer', transferKind: 'external', amount: { lt: 0 } },
+      ]
+    } else if (filters.flow === 'income') {
+      where.OR = [
+        { type: 'income' },
+        { type: 'transfer', transferKind: 'external', amount: { gt: 0 } },
+      ]
+    } else if (filters.flow === 'savings') {
+      where.type = 'transfer'
+      where.OR = [
+        { transferKind: 'internal' },
+        { transferKind: null },
+      ]
+    } else if (filters.type) {
       where.type = filters.type as TransactionType
     }
     if (filters.uncategorized === 'true') {
