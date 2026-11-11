@@ -32,7 +32,7 @@ export const TransactionController = {
 
   async create(req: Request, res: Response) {
     requireFields(req.body, 'date', 'amount', 'description', 'type')
-    const { date, description, type, transferKind, accountId, categoryId, isSubscription } = req.body
+    const { date, description, type, transferKind, accountId, transferAccountId, categoryId, isSubscription } = req.body
 
     const transaction = await TransactionService.create(req.userId, {
       date,
@@ -43,6 +43,7 @@ export const TransactionController = {
         ? requireEnum(String(transferKind), ['internal', 'external'] as const, 'transferKind')
         : undefined,
       accountId,
+      transferAccountId: transferAccountId ? String(transferAccountId) : undefined,
       categoryId,
       isSubscription: isSubscription !== undefined ? Boolean(isSubscription) : undefined,
     })
@@ -78,7 +79,16 @@ export const TransactionController = {
   },
 
   async update(req: Request, res: Response) {
-    const { description, type, transferKind, amount, date, accountId, categoryId, isSubscription } = req.body
+    const { description, type, transferKind, amount, date, accountId, transferAccountId, categoryId, isSubscription } = req.body
+
+    if (
+      transferAccountId !== undefined &&
+      transferAccountId !== null &&
+      typeof transferAccountId !== 'string'
+    ) {
+      throw new BadRequestError('transferAccountId must be a string or null')
+    }
+
     const transaction = await TransactionService.update(req.userId, req.params.id as string, {
       description,
       type: type
@@ -90,6 +100,7 @@ export const TransactionController = {
       amount: amount !== undefined ? parseFloat(String(amount)) : undefined,
       date: date ? String(date) : undefined,
       accountId: accountId !== undefined ? accountId : undefined,
+      transferAccountId: transferAccountId !== undefined ? transferAccountId : undefined,
       categoryId: categoryId !== undefined ? categoryId : undefined,
       isSubscription: isSubscription !== undefined ? Boolean(isSubscription) : undefined,
     })

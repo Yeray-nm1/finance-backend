@@ -42,8 +42,11 @@ function splitEvenly(total: number, count: number): number[] {
   return values.map((cents) => cents / 100)
 }
 
+type BalanceAccount = { type: string } | null
+
 type BalanceTransaction = Pick<Transaction, 'type' | 'amount' | 'transferKind'> & {
-  account?: { type: string } | null
+  account?: BalanceAccount
+  transferAccount?: BalanceAccount
 }
 
 function computeMonthBalance(transactions: BalanceTransaction[]) {
@@ -60,10 +63,19 @@ function computeMonthBalance(transactions: BalanceTransaction[]) {
       if (kind === 'external') {
         if (t.amount < 0) expenses += Math.abs(t.amount)
         else income += t.amount
-      } else if (t.account?.type === 'savings') {
-        savings += t.amount
       } else {
-        savings -= t.amount
+        const sourceType = t.account?.type ?? null
+        const destinationType = t.transferAccount?.type ?? null
+
+        if (sourceType && destinationType) {
+          if (sourceType !== destinationType) {
+            savings += destinationType === 'savings' ? -t.amount : t.amount
+          }
+        } else if (sourceType === 'savings') {
+          savings += t.amount
+        } else {
+          savings -= t.amount
+        }
       }
     }
   }
@@ -125,7 +137,7 @@ export const DashboardService = {
         userId,
         date: { gte: start, lt: end },
       },
-      include: { category: true, account: true },
+      include: { category: true, account: true, transferAccount: true },
     })
 
     return computeMonthBalance(transactions)
@@ -197,7 +209,7 @@ export const DashboardService = {
 
     const transactions = await prisma.transaction.findMany({
       where: { userId, date: { gte: first.start, lt: last.end } },
-      include: { account: true },
+      include: { account: true, transferAccount: true },
     })
 
     return ranges.map((range) => {

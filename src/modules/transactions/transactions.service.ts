@@ -1,4 +1,10 @@
-import { TransactionRepository, CreateTransactionDTO, TransactionFilters, TransferKind } from './transactions.repository'
+import {
+  TransactionRepository,
+  CreateTransactionDTO,
+  TransactionFilters,
+  TransactionType,
+  TransferKind,
+} from './transactions.repository'
 import { NotFoundError, BadRequestError } from '../../core/errors'
 import { createTransactionHash } from '../../utils/hash'
 import { SubscriptionRepository } from '../subscriptions/subscriptions.repository'
@@ -26,6 +32,7 @@ export type UpdateTransactionDTO = {
   amount?: number
   date?: string
   accountId?: string | null
+  transferAccountId?: string | null
   categoryId?: string | null
   isSubscription?: boolean
 }
@@ -55,6 +62,24 @@ function validateDate(value: string): Date {
     throw new BadRequestError('La fecha no es válida')
   }
   return date
+}
+
+function resolveTransferKind(
+  type: TransactionType,
+  transferKind: TransferKind | undefined,
+  fallback: TransferKind | null = null
+): TransferKind | null {
+  if (type !== 'transfer') return null
+  return transferKind ?? fallback ?? 'internal'
+}
+
+function assertDistinctAccounts(
+  accountId: string | null,
+  transferAccountId: string | null
+): void {
+  if (accountId && transferAccountId && accountId === transferAccountId) {
+    throw new BadRequestError('La cuenta destino debe ser distinta de la cuenta origen')
+  }
 }
 
 function buildCsvEntries(
@@ -216,6 +241,11 @@ export const TransactionService = {
     const accountId = dto.accountId
       ? await AccountService.getOwnedId(userId, dto.accountId)
       : null
+    const transferKind = resolveTransferKind(dto.type, dto.transferKind)
+    const transferAccountId = transferKind === 'internal' && dto.transferAccountId
+      ? await AccountService.getOwnedId(userId, dto.transferAccountId)
+      : null
+    assertDistinctAccounts(accountId, transferAccountId)
     const categoryId = dto.categoryId
       ? (await CategoryService.getById(userId, dto.categoryId)).id
       : null
@@ -226,8 +256,9 @@ export const TransactionService = {
       amount,
       description: dto.description,
       type: dto.type,
-      transferKind: dto.type === 'transfer' ? (dto.transferKind ?? 'internal') : null,
+      transferKind,
       accountId,
+      transferAccountId,
       categoryId,
       hash,
       isSubscription: dto.isSubscription ?? false,
@@ -241,28 +272,45 @@ export const TransactionService = {
     }
 
     const data: Record<string, unknown> = {}
+    const nextType = dto.type ?? existing.type
+    const nextTransferKind = resolveTransferKind(
+      nextType,
+      dto.transferKind,
+      existing.transferKind
+    )
 
     if (dto.description !== undefined) data.description = dto.description
     if (dto.type !== undefined) data.type = dto.type
     if (dto.amount !== undefined) data.amount = validateAmount(dto.amount)
     if (dto.date !== undefined) data.date = validateDate(dto.date)
+
+    let nextAccountId = existing.accountId
     if (dto.accountId !== undefined) {
-      data.accountId = dto.accountId
+      nextAccountId = dto.accountId
         ? await AccountService.getOwnedId(userId, dto.accountId)
         : null
+      data.accountId = nextAccountId
     }
+
+    let nextTransferAccountId = existing.transferAccountId ?? null
+    if (dto.transferAccountId !== undefined && nextTransferKind === 'internal') {
+      nextTransferAccountId = dto.transferAccountId
+        ? await AccountService.getOwnedId(userId, dto.transferAccountId)
+        : null
+    }
+    if (nextTransferKind !== 'internal') {
+      nextTransferAccountId = null
+    }
+    assertDistinctAccounts(nextAccountId, nextTransferAccountId)
+    data.transferAccountId = nextTransferAccountId
+
     if (dto.categoryId !== undefined) {
       data.categoryId = dto.categoryId
         ? (await CategoryService.getById(userId, dto.categoryId)).id
         : null
     }
     if (dto.isSubscription !== undefined) data.isSubscription = dto.isSubscription
-    if (dto.type !== undefined || dto.transferKind !== undefined) {
-      const nextType = dto.type ?? existing.type
-      data.transferKind = nextType === 'transfer'
-        ? (dto.transferKind ?? existing.transferKind ?? 'internal')
-        : null
-    }
+    data.transferKind = nextTransferKind
 
     const dateChanged = dto.date !== undefined
     const amountChanged = dto.amount !== undefined

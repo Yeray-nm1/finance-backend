@@ -28,7 +28,8 @@ model Account {
   createdAt DateTime @default(now())
 
   user        User @relation(fields: [userId], references: [id])
-  transactions Transaction[]
+  transactions Transaction[] @relation("TransactionAccount")
+  incomingTransfers Transaction[] @relation("TransactionTransferAccount")
 
   @@index([userId])
 }
@@ -37,6 +38,7 @@ model Transaction {
   id          String   @id @default(uuid())
   userId      String
   accountId   String?
+  transferAccountId String?
   categoryId  String?
 
   date        DateTime
@@ -54,7 +56,8 @@ model Transaction {
   createdAt   DateTime @default(now())
 
   user        User @relation(fields: [userId], references: [id])
-  account     Account? @relation(fields: [accountId], references: [id])
+  account     Account? @relation("TransactionAccount", fields: [accountId], references: [id])
+  transferAccount Account? @relation("TransactionTransferAccount", fields: [transferAccountId], references: [id], onDelete: SetNull)
   category    Category? @relation(fields: [categoryId], references: [id])
 
   @@unique([userId, hash])
@@ -63,6 +66,7 @@ model Transaction {
   @@index([userId, amount])
   @@index([description])
   @@index([userId, subscriptionId])
+  @@index([userId, transferAccountId])
 }
 
 model Category {

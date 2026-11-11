@@ -11,6 +11,7 @@ export type CreateTransactionDTO = {
   type: TransactionType
   transferKind?: TransferKind
   accountId?: string
+  transferAccountId?: string
   categoryId?: string
   isSubscription?: boolean
 }
@@ -94,7 +95,12 @@ export const TransactionRepository = {
         orderBy: { [sortBy]: sortOrder },
         skip,
         take: limit,
-        include: { account: true, category: true, subscription: { select: { name: true } } },
+        include: {
+          account: true,
+          transferAccount: true,
+          category: true,
+          subscription: { select: { name: true } },
+        },
       }),
       prisma.transaction.count({ where }),
     ])
@@ -107,6 +113,7 @@ export const TransactionRepository = {
       where: { id, userId },
       include: {
         account: true,
+        transferAccount: true,
         category: true,
         subscription: { select: { name: true } },
       },
@@ -140,6 +147,7 @@ export const TransactionRepository = {
     type: TransactionType
     transferKind?: TransferKind | null
     accountId?: string | null
+    transferAccountId?: string | null
     categoryId?: string | null
     hash: string
     isSubscription?: boolean
@@ -268,6 +276,7 @@ export const TransactionRepository = {
     type: TransactionType
     transferKind: TransferKind | null
     accountId: string | null
+    transferAccountId: string | null
     categoryId: string | null
     hash: string
     isSubscription: boolean

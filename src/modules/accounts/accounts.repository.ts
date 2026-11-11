@@ -25,10 +25,16 @@ export const AccountRepository = {
   },
 
   async detachTransactions(userId: string, accountId: string) {
-    return prisma.transaction.updateMany({
-      where: { userId, accountId },
-      data: { accountId: null },
-    })
+    return prisma.$transaction([
+      prisma.transaction.updateMany({
+        where: { userId, accountId },
+        data: { accountId: null },
+      }),
+      prisma.transaction.updateMany({
+        where: { userId, transferAccountId: accountId },
+        data: { transferAccountId: null },
+      }),
+    ])
   },
 
   async create(userId: string, dto: CreateAccountDTO) {
