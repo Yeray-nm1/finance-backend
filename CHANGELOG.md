@@ -1,3 +1,23 @@
+## [1.4.0] - 2026-11-11
+
+- 2784b01 Merge pull request #18 from Yeray-nm1/feat/mvp-budgets-csv-accounts-categories
+- 915eb95 feat(transfers): guardar la cuenta destino y calcular el ahorro por origen/destino
+- f032f5c ci: ejecutar lint en el pipeline
+- 2401a90 fix: validar importes, fechas y categorías en la API
+- 3f596e1 feat(transactions): filtrar por flujo de movimiento
+- 3452554 chore: eliminar la configuración ESLint antigua
+- 099aeab chore: versionar migraciones y configurar ESLint
+- 2c8b637 feat(auth): permitir cambiar la contraseña desde la app
+- b7343e9 feat: add subscription status and bulk transaction updates
+- b944472 feat(dashboard): add category spending and monthly evolution
+- 9defdf4 feat(transfers): distinguish internal and external transfers
+- e175bbf feat(categories): validate names and filter uncategorized transactions
+- 5cf01dd chore: remove unused keyword categorization
+- a887c6d feat(accounts): create default account and assign transactions
+- c1aee8b feat(transactions): add CSV preview and column mapping
+- 2d5a22d feat(budgets): allocate monthly budget per category
+- f3d9070 feat(budgets): add endpoint to list months with budget
+
 ## [1.3.4] - 2026-10-29
 
 - 7c6e8be Merge pull request #17 from Yeray-nm1/fix/csv-import-spanish-format
