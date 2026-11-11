@@ -2,13 +2,16 @@ import { prisma } from '../../core/db'
 import { Prisma } from '@prisma/client'
 
 export type TransactionType = 'income' | 'expense' | 'transfer'
+export type TransferKind = 'internal' | 'external'
 
 export type CreateTransactionDTO = {
   date: string
   amount: number
   description: string
   type: TransactionType
+  transferKind?: TransferKind
   accountId?: string
+  transferAccountId?: string
   categoryId?: string
   isSubscription?: boolean
 }
@@ -17,7 +20,9 @@ export type TransactionFilters = {
   page?: number
   limit?: number
   type?: string
+  flow?: string
   categoryId?: string
+  uncategorized?: string
   accountId?: string
   dateFrom?: string
   dateTo?: string
@@ -38,10 +43,28 @@ export const TransactionRepository = {
 
     const where: Prisma.TransactionWhereInput = { userId }
 
-    if (filters.type) {
+    if (filters.flow === 'expense') {
+      where.OR = [
+        { type: 'expense' },
+        { type: 'transfer', transferKind: 'external', amount: { lt: 0 } },
+      ]
+    } else if (filters.flow === 'income') {
+      where.OR = [
+        { type: 'income' },
+        { type: 'transfer', transferKind: 'external', amount: { gt: 0 } },
+      ]
+    } else if (filters.flow === 'savings') {
+      where.type = 'transfer'
+      where.OR = [
+        { transferKind: 'internal' },
+        { transferKind: null },
+      ]
+    } else if (filters.type) {
       where.type = filters.type as TransactionType
     }
-    if (filters.categoryId) {
+    if (filters.uncategorized === 'true') {
+      where.categoryId = null
+    } else if (filters.categoryId) {
       where.categoryId = filters.categoryId
     }
     if (filters.accountId) {
@@ -72,7 +95,12 @@ export const TransactionRepository = {
         orderBy: { [sortBy]: sortOrder },
         skip,
         take: limit,
-        include: { account: true, category: true, subscription: { select: { name: true } } },
+        include: {
+          account: true,
+          transferAccount: true,
+          category: true,
+          subscription: { select: { name: true } },
+        },
       }),
       prisma.transaction.count({ where }),
     ])
@@ -85,6 +113,7 @@ export const TransactionRepository = {
       where: { id, userId },
       include: {
         account: true,
+        transferAccount: true,
         category: true,
         subscription: { select: { name: true } },
       },
@@ -116,7 +145,9 @@ export const TransactionRepository = {
     amount: number
     description: string
     type: TransactionType
+    transferKind?: TransferKind | null
     accountId?: string | null
+    transferAccountId?: string | null
     categoryId?: string | null
     hash: string
     isSubscription?: boolean
@@ -130,6 +161,7 @@ export const TransactionRepository = {
     amount: number
     description: string
     type: TransactionType
+    transferKind?: TransferKind | null
     accountId?: string | null
     categoryId?: string | null
     hash: string
@@ -139,6 +171,23 @@ export const TransactionRepository = {
       data: transactions,
       skipDuplicates: true,
     })
+  },
+
+  async findExistingHashes(userId: string, hashes: string[]) {
+    if (hashes.length === 0) return [] as string[]
+
+    const existing: string[] = []
+
+    for (let index = 0; index < hashes.length; index += 500) {
+      const chunk = hashes.slice(index, index + 500)
+      const rows = await prisma.transaction.findMany({
+        where: { userId, hash: { in: chunk } },
+        select: { hash: true },
+      })
+      existing.push(...rows.map((row) => row.hash))
+    }
+
+    return existing
   },
 
   async findByDescriptionPattern(userId: string, pattern: string) {
@@ -188,6 +237,20 @@ export const TransactionRepository = {
     })
   },
 
+  async updateMany(
+    userId: string,
+    ids: string[],
+    data: { categoryId?: string | null; accountId?: string | null }
+  ) {
+    return prisma.transaction.updateMany({
+      where: {
+        userId,
+        id: { in: ids },
+      },
+      data,
+    })
+  },
+
   async deleteAllImported(userId: string) {
     return prisma.transaction.deleteMany({
       where: { userId, source: 'import' }
@@ -211,7 +274,9 @@ export const TransactionRepository = {
     amount: number
     description: string
     type: TransactionType
+    transferKind: TransferKind | null
     accountId: string | null
+    transferAccountId: string | null
     categoryId: string | null
     hash: string
     isSubscription: boolean

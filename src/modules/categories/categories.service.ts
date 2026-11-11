@@ -1,5 +1,25 @@
-import { CategoryRepository, CreateCategoryDTO } from './categories.repository'
-import { NotFoundError } from '../../core/errors'
+import { CategoryRepository, CreateCategoryDTO, CategoryType } from './categories.repository'
+import { BadRequestError, ConflictError, NotFoundError } from '../../core/errors'
+
+const CATEGORY_TYPES: CategoryType[] = ['needs', 'leisure', 'savings', 'other']
+
+function normalizeName(name: string): string {
+  const trimmed = name.trim()
+
+  if (!trimmed) {
+    throw new BadRequestError('El nombre de la categoría es obligatorio')
+  }
+
+  return trimmed
+}
+
+function normalizeType(type: string): CategoryType {
+  if (!CATEGORY_TYPES.includes(type as CategoryType)) {
+    throw new BadRequestError('El tipo de categoría debe ser needs, leisure, savings u other')
+  }
+
+  return type as CategoryType
+}
 
 type QueryOpts = {
   search?: string
@@ -21,12 +41,35 @@ export const CategoryService = {
   },
 
   async create(userId: string, dto: CreateCategoryDTO) {
-    return CategoryRepository.create(userId, dto)
+    const name = normalizeName(dto.name)
+    const type = normalizeType(dto.type)
+
+    const existing = await CategoryRepository.findByName(userId, name)
+    if (existing) {
+      throw new ConflictError('Ya existe una categoría con ese nombre')
+    }
+
+    return CategoryRepository.create(userId, { name, type })
   },
 
   async update(userId: string, id: string, dto: Partial<CreateCategoryDTO>) {
     await CategoryService.getById(userId, id)
-    return CategoryRepository.update(userId, id, dto)
+
+    const data: Partial<CreateCategoryDTO> = {}
+
+    if (dto.name !== undefined) {
+      data.name = normalizeName(dto.name)
+      const existing = await CategoryRepository.findByName(userId, data.name, id)
+      if (existing) {
+        throw new ConflictError('Ya existe una categoría con ese nombre')
+      }
+    }
+
+    if (dto.type !== undefined) {
+      data.type = normalizeType(dto.type)
+    }
+
+    return CategoryRepository.update(userId, id, data)
   },
 
   async delete(userId: string, id: string) {

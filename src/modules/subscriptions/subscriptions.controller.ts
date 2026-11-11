@@ -20,7 +20,7 @@ export const SubscriptionController = {
 
     const subscription = await SubscriptionService.create(req.userId, {
       name,
-      amount,
+      amount: parseFloat(String(amount)),
       frequency: requireEnum(frequency, VALID_FREQUENCIES, 'frequency'),
       transactionId,
     })
@@ -28,16 +28,17 @@ export const SubscriptionController = {
   },
 
   async update(req: Request, res: Response) {
-    const { name, amount, frequency, matchDescriptions } = req.body
+    const { name, amount, frequency, matchDescriptions, active } = req.body
     const data: Record<string, unknown> = {}
     if (name !== undefined) data.name = name
-    if (amount !== undefined) data.amount = amount
+    if (amount !== undefined) data.amount = parseFloat(String(amount))
     if (frequency !== undefined) {
       data.frequency = requireEnum(frequency, VALID_FREQUENCIES, 'frequency')
     }
     if (matchDescriptions !== undefined) {
       data.matchDescriptions = Array.isArray(matchDescriptions) ? matchDescriptions : []
     }
+    if (active !== undefined) data.active = Boolean(active)
     const subscription = await SubscriptionService.update(req.userId, req.params.id as string, data)
     res.json(subscription)
   },

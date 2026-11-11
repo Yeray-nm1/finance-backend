@@ -4,9 +4,11 @@ import { TransactionController } from './transactions.controller'
 const router = Router()
 
 router.get('/', TransactionController.getAll)
+router.post('/import/preview', TransactionController.previewCsv)
 router.post('/import', TransactionController.importCsv)
 router.post('/', TransactionController.create)
 router.delete('/batch', TransactionController.deleteMany)
+router.patch('/batch', TransactionController.updateMany)
 router.delete('/imported', TransactionController.deleteAllImported)
 router.get('/:id', TransactionController.getById)
 router.patch('/:id', TransactionController.update)

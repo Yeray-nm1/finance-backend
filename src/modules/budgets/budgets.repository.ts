@@ -1,4 +1,5 @@
 import { prisma } from '../../core/db'
+import { Prisma } from '@prisma/client'
 
 export const BudgetRepository = {
   async findByPeriod(userId: string, month: number, year: number) {
@@ -47,14 +48,37 @@ export const BudgetRepository = {
     })
   },
 
+  async findMonthlyMonths(userId: string) {
+    return prisma.monthlyBudget.findMany({
+      where: { userId },
+      select: { year: true, month: true },
+      orderBy: [{ year: 'asc' }, { month: 'asc' }],
+    })
+  },
+
   async upsertMonthly(
     userId: string, month: number, year: number,
-    totalIncome: number, typeAllocations: unknown,
+    totalIncome: number, typeAllocations: unknown, categoryAllocations: unknown,
   ) {
     return prisma.monthlyBudget.upsert({
       where: { userId_month_year: { userId, month, year } },
-      create: { userId, month, year, totalIncome, typeAllocations: typeAllocations as any },
-      update: { totalIncome, typeAllocations: typeAllocations as any },
+      create: {
+        userId, month, year, totalIncome,
+        typeAllocations: typeAllocations as Prisma.InputJsonValue,
+        categoryAllocations: categoryAllocations as Prisma.InputJsonValue,
+      },
+      update: {
+        totalIncome,
+        typeAllocations: typeAllocations as Prisma.InputJsonValue,
+        categoryAllocations: categoryAllocations as Prisma.InputJsonValue,
+      },
+    })
+  },
+
+  async findCategories(userId: string) {
+    return prisma.category.findMany({
+      where: { userId },
+      select: { id: true, type: true },
     })
   },
 

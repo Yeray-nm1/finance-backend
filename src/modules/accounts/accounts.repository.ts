@@ -17,6 +17,26 @@ export const AccountRepository = {
     return prisma.account.findFirst({ where: { id, userId } })
   },
 
+  async findFirst(userId: string) {
+    return prisma.account.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+    })
+  },
+
+  async detachTransactions(userId: string, accountId: string) {
+    return prisma.$transaction([
+      prisma.transaction.updateMany({
+        where: { userId, accountId },
+        data: { accountId: null },
+      }),
+      prisma.transaction.updateMany({
+        where: { userId, transferAccountId: accountId },
+        data: { transferAccountId: null },
+      }),
+    ])
+  },
+
   async create(userId: string, dto: CreateAccountDTO) {
     return prisma.account.create({
       data: {

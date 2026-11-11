@@ -1,5 +1,5 @@
 import { prisma } from '../../core/db'
-import { Transaction, Budget, Subscription, CategoryType } from '@prisma/client'
+import { Transaction, CategoryType } from '@prisma/client'
 import { normalizeDescription } from '../../utils/normalize'
 
 const TYPE_LABELS: Record<string, string> = {
@@ -11,6 +11,17 @@ const TYPE_LABELS: Record<string, string> = {
 
 type SubscriptionFrequency = 'weekly' | 'monthly' | 'yearly'
 
+type BudgetSummaryItem = {
+  categoryId: string | null
+  category: string
+  categoryType: CategoryType
+  percentage: number
+  spent: number
+  budgeted: number
+  progress: number
+  status: 'ok' | 'warning' | 'over'
+}
+
 function detectFrequencyName(avgDays: number): SubscriptionFrequency | null {
   if (avgDays >= 4 && avgDays <= 10) return 'weekly'
   if (avgDays >= 25 && avgDays <= 35) return 'monthly'
@@ -20,6 +31,70 @@ function detectFrequencyName(avgDays: number): SubscriptionFrequency | null {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
+}
+
+function splitEvenly(total: number, count: number): number[] {
+  if (count <= 0) return []
+  const totalCents = Math.round(total * 100)
+  const base = Math.floor(totalCents / count)
+  const values = Array.from({ length: count }, () => base)
+  values[count - 1] += totalCents - base * count
+  return values.map((cents) => cents / 100)
+}
+
+type BalanceAccount = { type: string } | null
+
+type BalanceTransaction = Pick<Transaction, 'type' | 'amount' | 'transferKind'> & {
+  account?: BalanceAccount
+  transferAccount?: BalanceAccount
+}
+
+function computeMonthBalance(transactions: BalanceTransaction[]) {
+  let income = 0
+  let expenses = 0
+  let savings = 0
+
+  for (const t of transactions) {
+    if (t.type === 'income') income += t.amount
+    else if (t.type === 'expense') expenses += Math.abs(t.amount)
+    else if (t.type === 'transfer') {
+      const kind = t.transferKind ?? 'internal'
+
+      if (kind === 'external') {
+        if (t.amount < 0) expenses += Math.abs(t.amount)
+        else income += t.amount
+      } else {
+        const sourceType = t.account?.type ?? null
+        const destinationType = t.transferAccount?.type ?? null
+
+        if (sourceType && destinationType) {
+          if (sourceType !== destinationType) {
+            savings += destinationType === 'savings' ? -t.amount : t.amount
+          }
+        } else if (sourceType === 'savings') {
+          savings += t.amount
+        } else {
+          savings -= t.amount
+        }
+      }
+    }
+  }
+
+  const available = income - expenses - savings
+  const balance = income - expenses
+
+  return {
+    income: round2(income),
+    expenses: round2(expenses),
+    savings: round2(savings),
+    available: round2(available),
+    balance: round2(balance),
+  }
+}
+
+function isSpendingTransaction(t: Pick<Transaction, 'type' | 'amount' | 'transferKind'>): boolean {
+  if (t.type === 'expense') return true
+  return t.type === 'transfer' && (t.transferKind ?? 'internal') === 'external' && t.amount < 0
 }
 
 export const DashboardService = {
@@ -62,32 +137,97 @@ export const DashboardService = {
         userId,
         date: { gte: start, lt: end },
       },
+      include: { category: true, account: true, transferAccount: true },
+    })
+
+    return computeMonthBalance(transactions)
+  },
+
+  async getCategorySpending(userId: string, year: number, month: number) {
+    const start = new Date(year, month - 1, 1)
+    const end = new Date(year, month, 1)
+
+    const transactions = await prisma.transaction.findMany({
+      where: { userId, date: { gte: start, lt: end } },
       include: { category: true },
     })
 
-    let income = 0
-    let expenses = 0
-    let savings = 0
+    const byCategory = new Map<string, {
+      categoryId: string | null
+      category: string
+      categoryType: CategoryType | null
+      amount: number
+    }>()
 
     for (const t of transactions) {
-      if (t.type === 'income') income += t.amount
-      else if (t.type === 'expense') expenses += Math.abs(t.amount)
-      else if (t.type === 'transfer') savings += Math.abs(t.amount)
+      if (!isSpendingTransaction(t)) continue
+
+      const amount = Math.abs(t.amount)
+      if (amount === 0) continue
+
+      const key = t.categoryId ?? '__uncategorized__'
+      const current = byCategory.get(key)
+
+      if (current) {
+        current.amount += amount
+      } else {
+        byCategory.set(key, {
+          categoryId: t.categoryId ?? null,
+          category: t.category?.name ?? 'Sin categoría',
+          categoryType: t.category?.type ?? null,
+          amount,
+        })
+      }
     }
 
-    const available = income - expenses - savings
-    const balance = income - expenses
+    const total = Array.from(byCategory.values()).reduce((sum, item) => sum + item.amount, 0)
 
-    return {
-      income: round2(income),
-      expenses: round2(expenses),
-      savings: round2(savings),
-      available: round2(available),
-      balance: round2(balance),
-    }
+    return Array.from(byCategory.values())
+      .map((item) => ({
+        ...item,
+        amount: round2(item.amount),
+        percentage: total > 0 ? round2((item.amount / total) * 100) : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount)
   },
 
-  async getBudgetBudgets(userId: string, year: number, month: number) {
+  async getMonthlyEvolution(userId: string, year: number, month: number, months = 6) {
+    const ranges = Array.from({ length: months }, (_, index) => {
+      const offset = months - 1 - index
+      const start = new Date(year, month - 1 - offset, 1)
+      const end = new Date(start.getFullYear(), start.getMonth() + 1, 1)
+      return {
+        year: start.getFullYear(),
+        month: start.getMonth() + 1,
+        start,
+        end,
+      }
+    })
+
+    const first = ranges[0]
+    const last = ranges[ranges.length - 1]
+
+    const transactions = await prisma.transaction.findMany({
+      where: { userId, date: { gte: first.start, lt: last.end } },
+      include: { account: true, transferAccount: true },
+    })
+
+    return ranges.map((range) => {
+      const monthTransactions = transactions.filter(
+        (t) => t.date >= range.start && t.date < range.end,
+      )
+      const balance = computeMonthBalance(monthTransactions)
+
+      return {
+        year: range.year,
+        month: range.month,
+        income: balance.income,
+        expenses: balance.expenses,
+      }
+    })
+  },
+
+  async getBudgetBudgets(userId: string, year: number, month: number): Promise<BudgetSummaryItem[]> {
     const start = new Date(year, month - 1, 1)
     const end = new Date(year, month, 1)
 
@@ -97,6 +237,11 @@ export const DashboardService = {
 
     if (monthlyBudget) {
       const allocations = monthlyBudget.typeAllocations as Array<{ type: CategoryType; percentage: number }>
+      const storedAllocations = (monthlyBudget.categoryAllocations ?? []) as Array<{
+        categoryId: string
+        amount: number
+      }>
+      const storedByCategory = new Map(storedAllocations.map((a) => [a.categoryId, a.amount]))
 
       const categories = await prisma.category.findMany({ where: { userId } })
       const categoriesByType: Record<string, Array<{ id: string; name: string }>> = {}
@@ -117,35 +262,43 @@ export const DashboardService = {
         }
       }
 
-      return allocations.flatMap((a) => {
-        const budgeted = monthlyBudget.totalIncome * (a.percentage / 100)
+      return allocations.flatMap((a): BudgetSummaryItem[] => {
+        const typeAmount = monthlyBudget.totalIncome * (a.percentage / 100)
         const typeCats = categoriesByType[a.type] ?? []
 
         if (typeCats.length === 0) {
-          const spent = 0
-          const progress = 0
           return [{
+            categoryId: null,
             category: TYPE_LABELS[a.type] ?? a.type,
             categoryType: a.type,
             percentage: a.percentage,
-            spent: round2(spent),
-            budgeted: round2(budgeted),
-            progress: round2(progress),
+            spent: 0,
+            budgeted: round2(typeAmount),
+            progress: 0,
             status: 'ok' as const,
           }]
         }
 
-        return typeCats.map((cat) => {
+        const hasStoredAllocations = typeCats.some((cat) => storedByCategory.has(cat.id))
+        const categoryAmounts = hasStoredAllocations
+          ? typeCats.map((cat) => storedByCategory.get(cat.id) ?? 0)
+          : splitEvenly(typeAmount, typeCats.length)
+
+        return typeCats.map((cat, index) => {
           const spent = spentByCategory[cat.id] ?? 0
+          const budgeted = round2(categoryAmounts[index] ?? 0)
           const progress = budgeted > 0 ? (spent / budgeted) * 100 : 0
-          const status = progress > 100 ? 'over' : progress > 80 ? 'warning' : 'ok'
+          const status = budgeted === 0
+            ? (spent > 0 ? 'over' as const : 'ok' as const)
+            : progress > 100 ? 'over' as const : progress > 80 ? 'warning' as const : 'ok' as const
 
           return {
+            categoryId: cat.id,
             category: cat.name,
             categoryType: a.type,
-            percentage: a.percentage,
+            percentage: typeAmount > 0 ? round2((budgeted / typeAmount) * 100) : 0,
             spent: round2(spent),
-            budgeted: round2(budgeted),
+            budgeted,
             progress: round2(progress),
             status,
           }
@@ -186,6 +339,7 @@ export const DashboardService = {
       const status = progress > 100 ? 'over' : progress > 80 ? 'warning' : 'ok'
 
       return {
+        categoryId: b.categoryId,
         category: b.category.name,
         categoryType: b.category.type,
         percentage: b.percentage,
@@ -216,6 +370,7 @@ export const DashboardService = {
       where: { userId },
       orderBy: { amount: 'desc' },
     })
+    const activeSubscriptions = subscriptions.filter((s) => s.active)
 
     const groups = await prisma.transaction.findMany({
       where: { userId, type: 'expense' },
@@ -277,7 +432,7 @@ export const DashboardService = {
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1)
 
     const manual = await Promise.all(
-      subscriptions.map(async (s) => {
+      activeSubscriptions.map(async (s) => {
         let lastTx = await prisma.transaction.findFirst({
           where: { userId, subscriptionId: s.id },
           orderBy: { date: 'desc' },
@@ -369,12 +524,22 @@ export const DashboardService = {
   },
 
   async getDashboard(userId: string, year: number, month: number) {
-    const [balance, budgets, recurring, transactions, vsPreviousMonth] = await Promise.all([
+    const [
+      balance,
+      budgets,
+      recurring,
+      transactions,
+      vsPreviousMonth,
+      categorySpending,
+      monthlyEvolution,
+    ] = await Promise.all([
       DashboardService.getMonthOverview(userId, year, month),
       DashboardService.getBudgetBudgets(userId, year, month),
       DashboardService.getRecurring(userId, year, month),
       DashboardService.getRecentTransactions(userId, year, month),
       DashboardService.getVsPreviousMonth(userId, year, month),
+      DashboardService.getCategorySpending(userId, year, month),
+      DashboardService.getMonthlyEvolution(userId, year, month),
     ])
 
     return {
@@ -382,6 +547,8 @@ export const DashboardService = {
       budgets,
       recurring,
       transactions,
+      categorySpending,
+      monthlyEvolution,
     }
   },
 }

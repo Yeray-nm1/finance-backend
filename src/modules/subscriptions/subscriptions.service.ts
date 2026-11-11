@@ -1,4 +1,4 @@
-import { SubscriptionRepository, CreateSubscriptionDTO } from './subscriptions.repository'
+import { SubscriptionRepository, CreateSubscriptionDTO, UpdateSubscriptionDTO } from './subscriptions.repository'
 import { TransactionRepository } from '../transactions/transactions.repository'
 import { NotFoundError, BadRequestError } from '../../core/errors'
 import { normalizeDescription } from '../../utils/normalize'
@@ -37,6 +37,13 @@ function checkDuplicates(userId: string, name: string, excludeId?: string) {
   })
 }
 
+function validateAmount(amount: number): number {
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+    throw new BadRequestError('El importe debe ser un número mayor que 0')
+  }
+  return amount
+}
+
 export const SubscriptionService = {
   async getAll(userId: string) {
     return SubscriptionRepository.findAll(userId)
@@ -53,7 +60,7 @@ export const SubscriptionService = {
 
     const sub = await SubscriptionRepository.create(userId, {
       name: dto.name,
-      amount: dto.amount,
+      amount: validateAmount(dto.amount),
       frequency: dto.frequency,
     })
 
@@ -92,8 +99,12 @@ export const SubscriptionService = {
     )
   },
 
-  async update(userId: string, id: string, dto: Partial<CreateSubscriptionDTO>) {
+  async update(userId: string, id: string, dto: UpdateSubscriptionDTO) {
     await SubscriptionService.getById(userId, id)
+
+    if (dto.amount !== undefined) {
+      dto = { ...dto, amount: validateAmount(dto.amount) }
+    }
 
     if (dto.name !== undefined) {
       await checkDuplicates(userId, dto.name, id)
