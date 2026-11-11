@@ -22,8 +22,10 @@ export type TransactionFilters = {
   type?: string
   flow?: string
   categoryId?: string
+  categoryIds?: string
   uncategorized?: string
   accountId?: string
+  accountIds?: string
   dateFrom?: string
   dateTo?: string
   search?: string
@@ -31,6 +33,11 @@ export type TransactionFilters = {
   subscriptionIds?: string
   sortBy?: string
   sortOrder?: string
+}
+
+function parseIdList(value?: string): string[] {
+  if (!value) return []
+  return value.split(',').map((id) => id.trim()).filter(Boolean)
 }
 
 export const TransactionRepository = {
@@ -42,33 +49,54 @@ export const TransactionRepository = {
     const sortOrder = filters.sortOrder ?? 'desc'
 
     const where: Prisma.TransactionWhereInput = { userId }
+    const conditions: Prisma.TransactionWhereInput[] = []
 
     if (filters.flow === 'expense') {
-      where.OR = [
-        { type: 'expense' },
-        { type: 'transfer', transferKind: 'external', amount: { lt: 0 } },
-      ]
+      conditions.push({
+        OR: [
+          { type: 'expense' },
+          { type: 'transfer', transferKind: 'external', amount: { lt: 0 } },
+        ],
+      })
     } else if (filters.flow === 'income') {
-      where.OR = [
-        { type: 'income' },
-        { type: 'transfer', transferKind: 'external', amount: { gt: 0 } },
-      ]
+      conditions.push({
+        OR: [
+          { type: 'income' },
+          { type: 'transfer', transferKind: 'external', amount: { gt: 0 } },
+        ],
+      })
     } else if (filters.flow === 'savings') {
-      where.type = 'transfer'
-      where.OR = [
-        { transferKind: 'internal' },
-        { transferKind: null },
-      ]
+      conditions.push({
+        type: 'transfer',
+        OR: [
+          { transferKind: 'internal' },
+          { transferKind: null },
+        ],
+      })
     } else if (filters.type) {
-      where.type = filters.type as TransactionType
+      conditions.push({ type: filters.type as TransactionType })
     }
-    if (filters.uncategorized === 'true') {
-      where.categoryId = null
+
+    const categoryIds = parseIdList(filters.categoryIds)
+    const uncategorized = filters.uncategorized === 'true'
+    if (categoryIds.length > 0 || uncategorized) {
+      const categoryConditions: Prisma.TransactionWhereInput[] = []
+      if (categoryIds.length > 0) categoryConditions.push({ categoryId: { in: categoryIds } })
+      if (uncategorized) categoryConditions.push({ categoryId: null })
+      conditions.push({ OR: categoryConditions })
     } else if (filters.categoryId) {
-      where.categoryId = filters.categoryId
+      conditions.push({ categoryId: filters.categoryId })
     }
-    if (filters.accountId) {
-      where.accountId = filters.accountId
+
+    const accountIds = parseIdList(filters.accountIds)
+    if (accountIds.length > 0) {
+      conditions.push({ accountId: { in: accountIds } })
+    } else if (filters.accountId) {
+      conditions.push({ accountId: filters.accountId })
+    }
+
+    if (conditions.length > 0) {
+      where.AND = conditions
     }
     if (filters.search) {
       where.description = {

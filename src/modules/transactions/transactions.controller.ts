@@ -3,17 +3,25 @@ import { TransactionService } from './transactions.service'
 import { requireFields, requireField, requireEnum } from '../../middlewares/validate.middleware'
 import { BadRequestError } from '../../core/errors'
 
+function queryList(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined
+  if (Array.isArray(value)) return value.map((item) => String(item)).join(',')
+  return String(value)
+}
+
 export const TransactionController = {
   async getAll(req: Request, res: Response) {
-    const { page, limit, type, flow, categoryId, uncategorized, accountId, dateFrom, dateTo, search, isSubscription, subscriptionIds, sortBy, sortOrder } = req.query
+    const { page, limit, type, flow, categoryId, categoryIds, uncategorized, accountId, accountIds, dateFrom, dateTo, search, isSubscription, subscriptionIds, sortBy, sortOrder } = req.query
     const result = await TransactionService.getAll(req.userId, {
       page: page ? parseInt(page as string) : undefined,
       limit: limit ? parseInt(limit as string) : undefined,
       type: type as string | undefined,
       flow: flow as string | undefined,
       categoryId: categoryId as string | undefined,
+      categoryIds: queryList(categoryIds),
       uncategorized: uncategorized as string | undefined,
       accountId: accountId as string | undefined,
+      accountIds: queryList(accountIds),
       dateFrom: dateFrom as string | undefined,
       dateTo: dateTo as string | undefined,
       search: search as string | undefined,
