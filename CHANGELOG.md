@@ -1,3 +1,9 @@
+## [1.5.0] - 2026-11-13
+
+- 2ce7e66 Merge pull request #19 from Yeray-nm1/feature/ynm-savings-goals
+- 55cd185 feat(goals): add savings goals and contributions
+- 79c6a1b feat(transactions): soportar filtros multi-valor de categorías y cuentas
+
 ## [1.4.0] - 2026-11-11
 
 - 2784b01 Merge pull request #18 from Yeray-nm1/feat/mvp-budgets-csv-accounts-categories
