@@ -16,6 +16,7 @@ import transactionRoutes from './modules/transactions/transactions.routes'
 import budgetRoutes from './modules/budgets/budgets.routes'
 import subscriptionRoutes from './modules/subscriptions/subscriptions.routes'
 import dashboardRoutes from './modules/dashboard/dashboard.routes'
+import goalRoutes from './modules/goals/goals.routes'
 
 const app = express()
 
@@ -55,6 +56,7 @@ app.use('/api/v1/transactions', transactionRoutes)
 app.use('/api/v1/budgets', budgetRoutes)
 app.use('/api/v1/subscriptions', subscriptionRoutes)
 app.use('/api/v1/dashboard', dashboardRoutes)
+app.use('/api/v1/goals', goalRoutes)
 
 app.use(errorMiddleware)
 
