@@ -18,6 +18,7 @@ model User {
   monthlyBudgets MonthlyBudget[]
   subscriptions Subscription[]
   notificationRules NotificationRule[]
+  savingsGoals SavingsGoal[]
 }
 
 model Account {
@@ -30,6 +31,7 @@ model Account {
   user        User @relation(fields: [userId], references: [id])
   transactions Transaction[] @relation("TransactionAccount")
   incomingTransfers Transaction[] @relation("TransactionTransferAccount")
+  savingsGoals SavingsGoal[]
 
   @@index([userId])
 }
@@ -50,8 +52,10 @@ model Transaction {
   source      String   @default("manual")
   isSubscription Boolean @default(false)
   subscriptionId String?
+  goalId      String?
 
   subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  goal        SavingsGoal? @relation("GoalContributions", fields: [goalId], references: [id], onDelete: SetNull)
 
   createdAt   DateTime @default(now())
 
@@ -67,6 +71,25 @@ model Transaction {
   @@index([description])
   @@index([userId, subscriptionId])
   @@index([userId, transferAccountId])
+  @@index([userId, goalId])
+}
+
+model SavingsGoal {
+  id           String    @id @default(uuid())
+  userId       String
+  name         String
+  targetAmount Float
+  targetDate   DateTime?
+  accountId    String?
+  isArchived   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id])
+  account       Account?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  contributions Transaction[] @relation("GoalContributions")
+
+  @@index([userId, isArchived])
 }
 
 model Category {
