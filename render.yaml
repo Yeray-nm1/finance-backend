@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: finance-backend
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: pnpm install --frozen-lockfile && pnpm build && pnpm prisma:migrate:deploy
+    startCommand: pnpm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      # Cadena de conexión de Supabase (Session pooler, puerto 5432).
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      # URL pública del frontend en Netlify, sin barra final.
+      - key: FRONTEND_URL
+        sync: false
