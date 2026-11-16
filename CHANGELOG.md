@@ -1,3 +1,8 @@
+## [1.5.1] - 2026-11-16
+
+- e84cc28 Merge pull request #20 from Yeray-nm1/chore/ynm-deploy-config
+- b8899b8 chore(deploy): add health endpoint and Render blueprint
+
 ## [1.5.0] - 2026-11-13
 
 - 2ce7e66 Merge pull request #19 from Yeray-nm1/feature/ynm-savings-goals
