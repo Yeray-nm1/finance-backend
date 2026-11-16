@@ -29,6 +29,11 @@ if (config.nodeEnv === 'production') {
 
 app.use(helmet())
 
+// Healthcheck para la plataforma (Render). Fuera del rate limit global.
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime() })
+})
+
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 100,
