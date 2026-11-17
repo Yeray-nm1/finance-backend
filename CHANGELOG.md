@@ -1,3 +1,8 @@
+## [1.5.2] - 2026-11-17
+
+- e6e2fde Merge pull request #21 from Yeray-nm1/chore/ynm-skip-rate-limit-in-e2e
+- 874a7b0 chore: skip global rate limit in test environment
+
 ## [1.5.1] - 2026-11-16
 
 - e84cc28 Merge pull request #20 from Yeray-nm1/chore/ynm-deploy-config
