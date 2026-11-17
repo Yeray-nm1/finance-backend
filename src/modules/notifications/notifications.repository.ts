@@ -1,16 +1,22 @@
 import { prisma } from '../../core/db'
 import { normalizeDescription } from '../../utils/normalize'
-import type { NotificationItem, NotificationType } from './notifications.types'
+import type {
+  NotificationEmailPayload,
+  NotificationItem,
+  NotificationType,
+} from './notifications.types'
 
 export interface NewNotification {
   key: string
   type: NotificationType
   title: string
   body: string
+  email?: NotificationEmailPayload
 }
 
 type RuleData = {
   enabled?: boolean
+  emailEnabled?: boolean
   daysBefore?: number
   summaryFrequency?: string
 }
@@ -28,11 +34,44 @@ export const NotificationRepository = {
     return prisma.notificationRule.create({ data: { userId, type, ...data } })
   },
 
-  async createNotifications(userId: string, items: NewNotification[]) {
-    if (items.length === 0) return
+  /** Inserta los avisos nuevos y devuelve solo los creados (para saber cuáles notificar por email). */
+  async createNotifications(userId: string, items: NewNotification[]): Promise<NewNotification[]> {
+    if (items.length === 0) return []
+
+    const keys = items.map((item) => item.key)
+    const existing = await prisma.notification.findMany({
+      where: { userId, key: { in: keys } },
+      select: { key: true },
+    })
+    const seen = new Set(existing.map((row) => row.key))
+    const created = items.filter((item) => !seen.has(item.key))
+    if (created.length === 0) return []
+
     await prisma.notification.createMany({
-      data: items.map((item) => ({ ...item, userId })),
+      data: created.map((item) => ({
+        key: item.key,
+        type: item.type,
+        title: item.title,
+        body: item.body,
+        userId,
+      })),
       skipDuplicates: true,
+    })
+    return created
+  },
+
+  /** Usuarios con al menos una regla activa: son los que debe barrer el job. */
+  findUsersWithNotifications() {
+    return prisma.user.findMany({
+      where: { notificationRules: { some: { enabled: true } } },
+      select: { id: true, email: true },
+    })
+  },
+
+  async disableEmails(userId: string) {
+    await prisma.notificationRule.updateMany({
+      where: { userId },
+      data: { emailEnabled: false },
     })
   },
 

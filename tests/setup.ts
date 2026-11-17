@@ -1,0 +1,6 @@
+process.env.NODE_ENV = 'test'
+process.env.DATABASE_URL ??= 'postgresql://user:pass@localhost:5432/finance_test'
+process.env.JWT_SECRET ??= 'test-jwt-secret-at-least-16-chars'
+process.env.EMAIL_SERVICE_URL ??= 'http://localhost:3003'
+process.env.EMAIL_SERVICE_API_KEY ??= 'test-email-service-api-key'
+process.env.CRON_SECRET ??= 'test-cron-secret'

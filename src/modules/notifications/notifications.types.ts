@@ -11,15 +11,23 @@ export type NotificationType = 'subscription_due' | 'spending_summary'
 export interface NotificationRules {
   subscriptionDue: {
     enabled: boolean
+    emailEnabled: boolean
     daysBefore: DaysBefore
   }
   spendingSummary: {
     enabled: boolean
+    emailEnabled: boolean
     frequency: SummaryFrequency
   }
 }
 
 export type SaveNotificationRulesDTO = NotificationRules
+
+/** Datos que el backend entrega al micro para renderizar la plantilla de email. */
+export interface NotificationEmailPayload {
+  template: 'subscription_due' | 'spending_summary'
+  data: Record<string, unknown>
+}
 
 export interface NotificationItem {
   id: string
