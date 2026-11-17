@@ -1,0 +1,23 @@
+name: Avisos por email
+
+# El job corre fuera del request del usuario: genera los avisos in-app y envía
+# por correo solo las reglas con emailEnabled. CRON_SECRET debe coincidir con
+# la variable del mismo nombre configurada en Render.
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  process-notifications:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Procesar avisos y enviar correos
+        env:
+          BACKEND_URL: https://finance-backend-hb7n.onrender.com
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "x-cron-secret: ${CRON_SECRET}" \
+            "${BACKEND_URL}/api/v1/internal/notifications/process"
