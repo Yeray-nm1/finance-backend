@@ -40,6 +40,9 @@ const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiadas peticiones. Intenta de nuevo en un minuto.' },
+  // Los E2E hacen muchas peticiones seguidas desde una sola IP y no deben
+  // chocar con el límite global.
+  skip: () => config.nodeEnv === 'test',
 })
 
 app.use(globalLimiter)
