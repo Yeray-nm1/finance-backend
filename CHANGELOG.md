@@ -1,3 +1,8 @@
+## [1.7.2] - 2026-11-17
+
+- b3e4cb8 Merge pull request #25 from Yeray-nm1/feature/ynm-email-wi4-schedule
+- 13a595a ci: programa el barrido diario de avisos por email (WI-4)
+
 ## [1.7.1] - 2026-11-17
 
 - 7a950b2 Merge pull request #24 from Yeray-nm1/feature/ynm-email-wi2-backend
