@@ -1,3 +1,8 @@
+## [1.7.1] - 2026-11-17
+
+- 7a950b2 Merge pull request #24 from Yeray-nm1/feature/ynm-email-wi2-backend
+- 4894c38 feat(notifications): envio de avisos por email via microservicio (WI-2)
+
 ## [1.7.0] - 2026-11-17
 
 - 9accaa9 Merge pull request #23 from Yeray-nm1/feature/ynm-preferences-delete
