@@ -1,6 +1,7 @@
 import { prisma } from '../../core/db'
 import { Transaction, CategoryType } from '@prisma/client'
 import { normalizeDescription } from '../../utils/normalize'
+import { addFrequency } from '../../utils/subscription-dates'
 
 const TYPE_LABELS: Record<string, string> = {
   needs: 'Necesidades',
@@ -452,31 +453,9 @@ export const DashboardService = {
         const status = isPaid ? 'paid' : 'pending'
         const lastChargeDate = lastTx ? lastTx.date.toISOString() : null
 
-        let nextChargeDate: string | null = null
-        if (lastTx) {
-          const d = new Date(lastTx.date)
-          switch (s.frequency) {
-            case 'weekly':
-              d.setDate(d.getDate() + 7)
-              break
-            case 'biweekly':
-              d.setDate(d.getDate() + 14)
-              break
-            case 'monthly':
-              d.setMonth(d.getMonth() + 1)
-              break
-            case 'bimonthly':
-              d.setMonth(d.getMonth() + 2)
-              break
-            case 'quarterly':
-              d.setMonth(d.getMonth() + 3)
-              break
-            case 'yearly':
-              d.setFullYear(d.getFullYear() + 1)
-              break
-          }
-          nextChargeDate = d.toISOString()
-        }
+        const nextChargeDate = lastTx
+          ? addFrequency(new Date(lastTx.date), s.frequency).toISOString()
+          : null
 
         return {
           name: s.name,

@@ -18,6 +18,7 @@ model User {
   monthlyBudgets MonthlyBudget[]
   subscriptions Subscription[]
   notificationRules NotificationRule[]
+  notifications Notification[]
   savingsGoals SavingsGoal[]
 }
 
@@ -189,15 +190,33 @@ model NotificationRule {
   id        String @id @default(uuid())
   userId    String
 
-  type      String // budget_exceeded, subscription_due, etc.
-  threshold Float?
-  categoryId String?
+  type            String // subscription_due, spending_summary
+  enabled         Boolean @default(false)
+  daysBefore      Int     @default(3)
+  summaryFrequency String @default("weekly") // weekly, monthly
 
   createdAt DateTime @default(now())
 
   user      User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+}
+
+model Notification {
+  id        String @id @default(uuid())
+  userId    String
+  key       String
+  type      String
+  title     String
+  body      String
+
+  createdAt DateTime @default(now())
+  readAt    DateTime?
+
+  user      User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, key])
+  @@index([userId, readAt])
 }
 
 enum TransactionType {
