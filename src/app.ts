@@ -18,6 +18,7 @@ import subscriptionRoutes from './modules/subscriptions/subscriptions.routes'
 import dashboardRoutes from './modules/dashboard/dashboard.routes'
 import goalRoutes from './modules/goals/goals.routes'
 import notificationRoutes from './modules/notifications/notifications.routes'
+import meRoutes from './modules/me/me.routes'
 
 const app = express()
 
@@ -67,6 +68,7 @@ app.use('/api/v1/subscriptions', subscriptionRoutes)
 app.use('/api/v1/dashboard', dashboardRoutes)
 app.use('/api/v1/goals', goalRoutes)
 app.use('/api/v1/notifications', notificationRoutes)
+app.use('/api/v1/me', meRoutes)
 
 app.use(errorMiddleware)
 
