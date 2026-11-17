@@ -1,3 +1,8 @@
+## [1.6.0] - 2026-11-17
+
+- 9ef4dbb Merge pull request #22 from Yeray-nm1/feature/ynm-in-app-notifications
+- 45d19ea feat(notifications): add in-app notification rules and alerts
+
 ## [1.5.2] - 2026-11-17
 
 - e6e2fde Merge pull request #21 from Yeray-nm1/chore/ynm-skip-rate-limit-in-e2e
