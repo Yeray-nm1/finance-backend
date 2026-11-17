@@ -192,6 +192,7 @@ model NotificationRule {
 
   type            String // subscription_due, spending_summary
   enabled         Boolean @default(false)
+  emailEnabled    Boolean @default(false)
   daysBefore      Int     @default(3)
   summaryFrequency String @default("weekly") // weekly, monthly
 

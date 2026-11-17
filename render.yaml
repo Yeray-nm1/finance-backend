@@ -22,3 +22,11 @@ services:
       # URL pública del frontend en Netlify, sin barra final.
       - key: FRONTEND_URL
         sync: false
+      # Envío de avisos por email (WI-2/WI-4). Opcionales en el código:
+      # el endpoint interno y el sender fallan cerrados si no están definidos.
+      - key: EMAIL_SERVICE_URL
+        sync: false
+      - key: EMAIL_SERVICE_API_KEY
+        sync: false
+      - key: CRON_SECRET
+        generateValue: true

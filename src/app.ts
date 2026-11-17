@@ -18,6 +18,8 @@ import subscriptionRoutes from './modules/subscriptions/subscriptions.routes'
 import dashboardRoutes from './modules/dashboard/dashboard.routes'
 import goalRoutes from './modules/goals/goals.routes'
 import notificationRoutes from './modules/notifications/notifications.routes'
+import internalNotificationRoutes from './modules/notifications/internal-notifications.routes'
+import unsubscribeRoutes from './modules/notifications/unsubscribe.routes'
 import meRoutes from './modules/me/me.routes'
 
 const app = express()
@@ -57,6 +59,10 @@ app.use(cookieParser())
 app.use(morgan('dev'))
 
 app.use('/api/v1/auth', authRoutes)
+// El job de GitHub Actions no tiene sesión: se protege con CRON_SECRET.
+app.use('/api/v1/internal/notifications', internalNotificationRoutes)
+// Los links de los correos tampoco: llevan un token firmado en la query.
+app.use('/api/v1/unsubscribe', unsubscribeRoutes)
 
 app.use(authMiddleware)
 

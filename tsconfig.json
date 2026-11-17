@@ -8,5 +8,5 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "exclude": ["eslint.config.js", "prisma.config.ts", "prisma", "dist", "node_modules"]
+  "exclude": ["eslint.config.js", "prisma.config.ts", "vitest.config.ts", "tests", "prisma", "dist", "node_modules"]
 }
