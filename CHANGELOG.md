@@ -1,3 +1,8 @@
+## [1.7.0] - 2026-11-17
+
+- 9accaa9 Merge pull request #23 from Yeray-nm1/feature/ynm-preferences-delete
+- 13b3b31 feat(me): add endpoints to delete user data and account
+
 ## [1.6.0] - 2026-11-17
 
 - 9ef4dbb Merge pull request #22 from Yeray-nm1/feature/ynm-in-app-notifications
