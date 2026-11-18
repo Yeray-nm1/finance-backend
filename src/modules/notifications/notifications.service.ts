@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { config } from '../../config/env'
 import { BadRequestError, NotFoundError } from '../../core/errors'
 import { logger } from '../../core/logger'
 import { nextChargeDate } from '../../utils/subscription-dates'
@@ -9,6 +10,7 @@ import {
   DAYS_BEFORE,
   DaysBefore,
   NotificationRules,
+  NotificationType,
   NotificationsResponse,
   SummaryFrequency,
 } from './notifications.types'
@@ -24,7 +26,29 @@ const saveRulesSchema = z.object({
     emailEnabled: z.boolean().default(false),
     frequency: z.enum(['weekly', 'monthly']),
   }),
+  // Opcional para no romper clientes que guardaron las reglas antes de existir.
+  goalReminder: z
+    .object({
+      enabled: z.boolean(),
+      emailEnabled: z.boolean().default(false),
+    })
+    .default({ enabled: false, emailEnabled: false }),
 })
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+function emailEnabledFor(type: NotificationType, rules: NotificationRules): boolean {
+  switch (type) {
+    case 'subscription_due':
+      return rules.subscriptionDue.emailEnabled
+    case 'spending_summary':
+      return rules.spendingSummary.emailEnabled
+    case 'goal_reminder':
+      return rules.goalReminder.emailEnabled
+  }
+}
 
 const money = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
 const shortDate = new Intl.DateTimeFormat('es-ES', {
@@ -61,6 +85,7 @@ export const NotificationService = {
     const rules = await NotificationRepository.findRules(userId)
     const subscription = rules.find((rule) => rule.type === 'subscription_due')
     const summary = rules.find((rule) => rule.type === 'spending_summary')
+    const reminder = rules.find((rule) => rule.type === 'goal_reminder')
 
     const daysBefore = subscription?.daysBefore
     const frequency = summary?.summaryFrequency
@@ -78,6 +103,10 @@ export const NotificationService = {
         emailEnabled: summary?.emailEnabled ?? false,
         frequency: frequency === 'weekly' || frequency === 'monthly' ? frequency : 'weekly',
       },
+      goalReminder: {
+        enabled: reminder?.enabled ?? false,
+        emailEnabled: reminder?.emailEnabled ?? false,
+      },
     }
   },
 
@@ -85,11 +114,11 @@ export const NotificationService = {
     const parsed = saveRulesSchema.safeParse(body)
     if (!parsed.success) {
       throw new BadRequestError(
-        'Reglas de notificación inválidas: usa enabled, emailEnabled, daysBefore (1, 3 o 7) y frequency (weekly o monthly)'
+        'Reglas de notificación inválidas: usa enabled, emailEnabled, daysBefore (1, 3 o 7), frequency (weekly o monthly) y goalReminder'
       )
     }
 
-    const { subscriptionDue, spendingSummary } = parsed.data
+    const { subscriptionDue, spendingSummary, goalReminder } = parsed.data
     await Promise.all([
       NotificationRepository.saveRule(userId, 'subscription_due', {
         enabled: subscriptionDue.enabled,
@@ -100,6 +129,10 @@ export const NotificationService = {
         enabled: spendingSummary.enabled,
         emailEnabled: spendingSummary.emailEnabled,
         summaryFrequency: spendingSummary.frequency,
+      }),
+      NotificationRepository.saveRule(userId, 'goal_reminder', {
+        enabled: goalReminder.enabled,
+        emailEnabled: goalReminder.emailEnabled,
       }),
     ])
 
@@ -171,6 +204,37 @@ export const NotificationService = {
       }
     }
 
+    if (rules.goalReminder.enabled) {
+      const goals = await NotificationRepository.findGoalsWithReminder(userId)
+      const monthKey = now.toISOString().slice(0, 7)
+
+      for (const goal of goals) {
+        if (goal.reminderDay !== now.getUTCDate()) continue
+
+        const saved = round2(goal.saved)
+        const target = round2(goal.targetAmount)
+        const suggestion = goal.reminderAmount == null ? null : round2(goal.reminderAmount)
+        const data: Record<string, unknown> = {
+          goalName: goal.name,
+          saved,
+          target,
+          goalsUrl: `${config.frontendUrl.replace(/\/$/, '')}/goals`,
+          unsubscribeUrl: createUnsubscribeUrl(userId),
+        }
+        if (suggestion != null) data.suggestedAmount = suggestion
+
+        notifications.push({
+          key: `goal_reminder:${goal.id}:${monthKey}`,
+          type: 'goal_reminder',
+          title: `Recordatorio de meta: ${goal.name}`,
+          body: `Llevas ahorrados ${money.format(saved)} de ${money.format(target)}.${
+            suggestion == null ? '' : ` Aportación sugerida: ${money.format(suggestion)}.`
+          } Confirma tu aportación manual en Metas.`,
+          email: { template: 'goal_reminder', data },
+        })
+      }
+    }
+
     return notifications
   },
 
@@ -201,12 +265,7 @@ export const NotificationService = {
       result.processed += created.length
 
       for (const notification of created) {
-        const onlyIfEnabled =
-          notification.type === 'subscription_due'
-            ? rules.subscriptionDue.emailEnabled
-            : rules.spendingSummary.emailEnabled
-
-        if (!onlyIfEnabled || !notification.email) continue
+        if (!emailEnabledFor(notification.type, rules) || !notification.email) continue
 
         try {
           await sender.send({

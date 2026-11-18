@@ -6,7 +6,7 @@ export type SummaryFrequency = (typeof SUMMARY_FREQUENCIES)[number]
 export type SummaryPeriod = (typeof SUMMARY_PERIODS)[number]
 export type DaysBefore = (typeof DAYS_BEFORE)[number]
 
-export type NotificationType = 'subscription_due' | 'spending_summary'
+export type NotificationType = 'subscription_due' | 'spending_summary' | 'goal_reminder'
 
 export interface NotificationRules {
   subscriptionDue: {
@@ -19,13 +19,17 @@ export interface NotificationRules {
     emailEnabled: boolean
     frequency: SummaryFrequency
   }
+  goalReminder: {
+    enabled: boolean
+    emailEnabled: boolean
+  }
 }
 
 export type SaveNotificationRulesDTO = NotificationRules
 
 /** Datos que el backend entrega al micro para renderizar la plantilla de email. */
 export interface NotificationEmailPayload {
-  template: 'subscription_due' | 'spending_summary'
+  template: 'subscription_due' | 'spending_summary' | 'goal_reminder'
   data: Record<string, unknown>
 }
 

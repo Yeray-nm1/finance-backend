@@ -17,20 +17,23 @@ export const GoalController = {
   async create(req: Request, res: Response) {
     requireFields(req.body, 'name', 'targetAmount')
 
-    const { name, targetAmount, targetDate, accountId } = req.body
+    const { name, targetAmount, targetDate, accountId, reminderDay, reminderAmount } = req.body
 
     const goal = await GoalService.create(req.userId, {
       name,
       targetAmount,
       targetDate,
       accountId,
+      reminderDay,
+      reminderAmount,
     })
 
     res.status(201).json(goal)
   },
 
   async update(req: Request, res: Response) {
-    const { name, targetAmount, targetDate, accountId, isArchived } = req.body
+    const { name, targetAmount, targetDate, accountId, isArchived, reminderDay, reminderAmount } =
+      req.body
 
     const goal = await GoalService.update(req.userId, req.params.id as string, {
       name,
@@ -38,6 +41,8 @@ export const GoalController = {
       targetDate,
       accountId,
       isArchived,
+      reminderDay,
+      reminderAmount,
     })
 
     res.json(goal)
