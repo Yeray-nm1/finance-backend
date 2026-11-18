@@ -4,6 +4,8 @@ vi.mock('../src/modules/notifications/notifications.repository', () => ({
   NotificationRepository: {
     findRules: vi.fn(),
     saveRule: vi.fn(),
+    list: vi.fn(),
+    countUnread: vi.fn(),
     findUsersWithNotifications: vi.fn(),
     findActiveSubscriptions: vi.fn(),
     findLastCharge: vi.fn(),
@@ -93,6 +95,30 @@ describe('aportación programada · generación en el barrido', () => {
     expect(String(notifications[0].email?.data.acceptUrl)).toMatch(/\/goals\/aceptar\?token=/)
     expect(String(notifications[0].email?.data.unsubscribeUrl)).toContain('/api/v1/unsubscribe?token=')
     expect(notifications.some((item) => item.type === 'goal_reminder')).toBe(false)
+  })
+
+  it('FIX-4 abrir la campana asegura la fila antes de crear el aviso con su enlace', async () => {
+    repo.list.mockResolvedValue([] as never)
+    repo.countUnread.mockResolvedValue(0 as never)
+
+    await NotificationService.list('u1')
+
+    expect(repo.ensureGoalContribution).toHaveBeenCalledWith({
+      userId: 'u1',
+      goalId: 'g1',
+      period: PERIOD,
+      amount: 100,
+      goalAccountId: 'a1',
+    })
+    expect(repo.createNotifications).toHaveBeenCalledWith(
+      'u1',
+      expect.arrayContaining([
+        expect.objectContaining({ key: `goal_contribution:g1:${PERIOD}` }),
+      ])
+    )
+    expect(repo.ensureGoalContribution.mock.invocationCallOrder[0]).toBeLessThan(
+      repo.createNotifications.mock.invocationCallOrder[0]
+    )
   })
 
   it('FIX-2 el aviso in-app abre la misma aceptación que el correo', async () => {

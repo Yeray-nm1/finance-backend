@@ -341,7 +341,15 @@ export const NotificationService = {
 
   async list(userId: string): Promise<NotificationsResponse> {
     const rules = await NotificationService.getRules(userId)
-    const notifications = await NotificationService.collectNotifications(userId, rules, new Date())
+    const now = new Date()
+
+    // La campana crea el aviso de la aportación con su enlace de aceptación.
+    // La fila tiene que existir antes, o el enlace daría «ya no está disponible».
+    if (rules.goalReminder.enabled) {
+      await NotificationService.ensureScheduledContributions(userId, now)
+    }
+
+    const notifications = await NotificationService.collectNotifications(userId, rules, now)
     await NotificationRepository.createNotifications(userId, notifications)
 
     const [items, unreadCount] = await Promise.all([
