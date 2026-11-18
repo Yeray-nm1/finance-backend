@@ -103,6 +103,7 @@ describe('WI-2 · endpoint interno /process', () => {
     expect(sender.send).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'user@example.com',
+        fromName: 'Finance Dashboard',
         template: 'subscription_due',
         idempotencyKey: 'finance:subscription_due:s1:2026-11-17',
       })
