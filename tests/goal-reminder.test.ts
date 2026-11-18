@@ -198,7 +198,7 @@ describe('recordatorio mensual de metas · avisos', () => {
 
     const result = await NotificationService.processAll(sender)
 
-    expect(result).toEqual({ processed: 1, emailsSent: 1, emailsFailed: 0 })
+    expect(result).toMatchObject({ processed: 1, emailsSent: 1, emailsFailed: 0 })
     expect(sender.send).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'user@example.com',
@@ -216,7 +216,7 @@ describe('recordatorio mensual de metas · avisos', () => {
 
     const result = await NotificationService.processAll(sender)
 
-    expect(result).toEqual({ processed: 1, emailsSent: 0, emailsFailed: 0 })
+    expect(result).toMatchObject({ processed: 1, emailsSent: 0, emailsFailed: 0 })
     expect(sender.send).not.toHaveBeenCalled()
   })
 

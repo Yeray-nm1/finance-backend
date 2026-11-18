@@ -20,6 +20,7 @@ model User {
   notificationRules NotificationRule[]
   notifications Notification[]
   savingsGoals SavingsGoal[]
+  goalContributions GoalContribution[]
 }
 
 model Account {
@@ -33,6 +34,8 @@ model Account {
   transactions Transaction[] @relation("TransactionAccount")
   incomingTransfers Transaction[] @relation("TransactionTransferAccount")
   savingsGoals SavingsGoal[]
+  contributionDestinations GoalContribution[] @relation("ContributionDestination")
+  contributionSources GoalContribution[] @relation("ContributionSource")
 
   @@index([userId])
 }
@@ -85,16 +88,43 @@ model SavingsGoal {
   isArchived   Boolean   @default(false)
   /// Día del mes (1-28) en el que se envía el recordatorio mensual de la meta.
   reminderDay    Int?
-  /// Cuota sugerida para la aportación manual que propone el recordatorio.
+  /// Cuota sugerida para la aportación manual que propone el recordatorio; si la aportación está programada, es el importe real del cargo.
   reminderAmount Float?
+  /// Si la aportación mensual está programada y requiere aceptación por correo.
+  contributionScheduled Boolean @default(false)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   user          User          @relation(fields: [userId], references: [id])
   account       Account?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
   contributions Transaction[] @relation("GoalContributions")
+  scheduledContributions GoalContribution[] @relation("ScheduledGoalContributions")
 
   @@index([userId, isArchived])
+}
+
+/// Aportación mensual propuesta por correo. El importe y la cuenta destino se
+/// congelan al generarla para que coincidan con lo anunciado en el correo.
+model GoalContribution {
+  id          String    @id @default(uuid())
+  userId      String
+  goalId      String
+  /// Periodo UTC del cargo, en formato YYYY-MM.
+  period      String
+  amount      Float
+  goalAccountId String
+  status      String    @default("pending")
+  sourceAccountId String?
+  createdAt   DateTime  @default(now())
+  acceptedAt  DateTime?
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal      SavingsGoal @relation("ScheduledGoalContributions", fields: [goalId], references: [id], onDelete: Cascade)
+  goalAccount Account   @relation("ContributionDestination", fields: [goalAccountId], references: [id], onDelete: Cascade)
+  sourceAccount Account? @relation("ContributionSource", fields: [sourceAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([goalId, period])
+  @@index([userId, status])
 }
 
 model Category {

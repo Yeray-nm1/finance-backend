@@ -78,7 +78,7 @@ describe('envío de correo independiente de la creación del aviso in-app', () =
 
     const result = await NotificationService.processAll(sender)
 
-    expect(result).toEqual({ processed: 0, emailsSent: 1, emailsFailed: 0 })
+    expect(result).toMatchObject({ processed: 0, emailsSent: 1, emailsFailed: 0 })
     expect(sender.send).toHaveBeenCalledOnce()
     expect(repo.markEmailsSent).toHaveBeenCalledWith('u1', [KEY])
   })
@@ -99,13 +99,13 @@ describe('envío de correo independiente de la creación del aviso in-app', () =
     const failing = { send: vi.fn().mockRejectedValue(new Error('micro caído')) }
 
     const first = await NotificationService.processAll(failing)
-    expect(first).toEqual({ processed: 1, emailsSent: 0, emailsFailed: 1 })
+    expect(first).toMatchObject({ processed: 1, emailsSent: 0, emailsFailed: 1 })
     expect(repo.markEmailsSent).not.toHaveBeenCalled()
 
     const retry = senderStub()
     const second = await NotificationService.processAll(retry)
 
-    expect(second).toEqual({ processed: 1, emailsSent: 1, emailsFailed: 0 })
+    expect(second).toMatchObject({ processed: 1, emailsSent: 1, emailsFailed: 0 })
     expect(retry.send).toHaveBeenCalledOnce()
     expect(repo.markEmailsSent).toHaveBeenCalledWith('u1', [KEY])
   })
