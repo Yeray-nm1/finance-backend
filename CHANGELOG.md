@@ -1,3 +1,8 @@
+## [1.10.2] - 2026-11-18
+
+- 28fb1ce Merge pull request #33 from Yeray-nm1/fix/ynm-goal-contribution-bell-link
+- 8e16afd fix: asegura la aportación al abrir la campana
+
 ## [1.10.1] - 2026-11-18
 
 - c35110a Merge pull request #32 from Yeray-nm1/fix/ynm-goal-contribution-followup
