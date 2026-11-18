@@ -58,6 +58,25 @@ export const AuthController = {
     res.status(204).send()
   },
 
+  async forgotPassword(req: Request, res: Response) {
+    const email = requireField<string>(req.body, 'email')
+
+    await AuthService.requestPasswordReset(email)
+
+    res.status(204).send()
+  },
+
+  async resetPassword(req: Request, res: Response) {
+    const token = requireField<string>(req.body, 'token')
+    const password = requireField<string>(req.body, 'password')
+
+    validatePassword(password)
+
+    await AuthService.resetPassword(token, password)
+
+    res.status(204).send()
+  },
+
   async me(req: Request, res: Response) {
     const userId = req.userId
     const user = await AuthService.me(userId)
