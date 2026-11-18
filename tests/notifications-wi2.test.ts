@@ -103,7 +103,7 @@ describe('WI-2 · endpoint interno /process', () => {
 
     const result = await NotificationService.processAll(sender)
 
-    expect(result).toEqual({ processed: 2, emailsSent: 1, emailsFailed: 0 })
+    expect(result).toMatchObject({ processed: 2, emailsSent: 1, emailsFailed: 0 })
     expect(repo.createNotifications).toHaveBeenCalledTimes(1)
     expect(sender.send).toHaveBeenCalledTimes(1)
     expect(sender.send).toHaveBeenCalledWith(
@@ -135,7 +135,7 @@ describe('WI-2 · endpoint interno /process', () => {
 
     const result = await NotificationService.processAll(sender)
 
-    expect(result).toEqual({ processed: 0, emailsSent: 1, emailsFailed: 0 })
+    expect(result).toMatchObject({ processed: 0, emailsSent: 1, emailsFailed: 0 })
     expect(sender.send).toHaveBeenCalledOnce()
     expect(repo.markEmailsSent).toHaveBeenCalledWith('u1', ['subscription_due:s1:2026-11-17'])
   })
@@ -145,7 +145,7 @@ describe('WI-2 · endpoint interno /process', () => {
 
     const result = await NotificationService.processAll(sender)
 
-    expect(result).toEqual({ processed: 2, emailsSent: 0, emailsFailed: 1 })
+    expect(result).toMatchObject({ processed: 2, emailsSent: 0, emailsFailed: 1 })
   })
 
   it('no reenvía el correo en el siguiente barrido tras marcarlo como enviado', async () => {

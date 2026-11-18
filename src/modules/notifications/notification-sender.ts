@@ -5,6 +5,7 @@ export type EmailTemplateName =
   | 'spending_summary'
   | 'password_reset'
   | 'goal_reminder'
+  | 'goal_contribution_accept'
 
 /** Nombre visible con el que el dashboard financiero se identifica ante el micro de email. */
 export const FINANCE_FROM_NAME = 'Finance Dashboard'

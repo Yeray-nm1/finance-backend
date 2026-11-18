@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '../../core/db'
 import { normalizeDescription } from '../../utils/normalize'
 import type {
@@ -181,6 +182,8 @@ export const NotificationRepository = {
         targetAmount: true,
         reminderDay: true,
         reminderAmount: true,
+        accountId: true,
+        contributionScheduled: true,
       },
       orderBy: { name: 'asc' },
     })
@@ -201,5 +204,32 @@ export const NotificationRepository = {
     )
 
     return goals.map((goal) => ({ ...goal, saved: saved.get(goal.id) ?? 0 }))
+  },
+
+  /**
+   * Crea la aportación pendiente del periodo solo si no existe ya. Devuelve
+   * `true` cuando la ha creado y `false` cuando ya estaba (segundo barrido).
+   */
+  async ensureGoalContribution(data: {
+    userId: string
+    goalId: string
+    period: string
+    amount: number
+    goalAccountId: string
+  }): Promise<boolean> {
+    const where = { goalId_period: { goalId: data.goalId, period: data.period } }
+
+    const existing = await prisma.goalContribution.findUnique({ where, select: { id: true } })
+    if (existing) return false
+
+    try {
+      await prisma.goalContribution.create({ data })
+      return true
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return false
+      }
+      throw error
+    }
   },
 }

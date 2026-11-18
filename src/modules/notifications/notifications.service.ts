@@ -3,6 +3,7 @@ import { config } from '../../config/env'
 import { BadRequestError, NotFoundError } from '../../core/errors'
 import { logger } from '../../core/logger'
 import { nextChargeDate } from '../../utils/subscription-dates'
+import { createGoalContributionUrl } from '../../utils/goal-contribution-token'
 import { createUnsubscribeUrl } from '../../utils/unsubscribe'
 import { NotificationRepository, NewNotification } from './notifications.repository'
 import { FINANCE_FROM_NAME, notificationSender, NotificationSender } from './notification-sender'
@@ -46,6 +47,7 @@ function emailEnabledFor(type: NotificationType, rules: NotificationRules): bool
     case 'spending_summary':
       return rules.spendingSummary.emailEnabled
     case 'goal_reminder':
+    case 'goal_contribution':
       return rules.goalReminder.emailEnabled
   }
 }
@@ -78,6 +80,34 @@ export interface ProcessResult {
   processed: number
   emailsSent: number
   emailsFailed: number
+  contributionsCreated: number
+  contributionsSkipped: number
+}
+
+interface GoalForReminder {
+  id: string
+  name: string
+  targetAmount: number
+  reminderDay: number | null
+  reminderAmount: number | null
+  saved: number
+  accountId?: string | null
+  contributionScheduled?: boolean
+}
+
+/** Aportación programada que debe proponerse este mes, o null si la meta no es elegible. */
+function scheduledContributionFor(goal: GoalForReminder, now: Date) {
+  if (!goal.contributionScheduled) return null
+  if (goal.reminderDay !== now.getUTCDate()) return null
+  if (!goal.accountId) return null
+
+  const saved = round2(goal.saved)
+  if (saved >= round2(goal.targetAmount)) return null
+
+  const amount = goal.reminderAmount == null ? null : round2(goal.reminderAmount)
+  if (amount === null || amount <= 0) return null
+
+  return { period: now.toISOString().slice(0, 7), amount, goalAccountId: goal.accountId }
 }
 
 export const NotificationService = {
@@ -211,6 +241,27 @@ export const NotificationService = {
       for (const goal of goals) {
         if (goal.reminderDay !== now.getUTCDate()) continue
 
+        const scheduled = scheduledContributionFor(goal, now)
+        if (scheduled) {
+          notifications.push({
+            key: `goal_contribution:${goal.id}:${scheduled.period}`,
+            type: 'goal_contribution',
+            title: `Aportación programada: ${goal.name}`,
+            body: `Tienes una aportación de ${money.format(scheduled.amount)} pendiente de confirmar para «${goal.name}». No se cobrará nada hasta que la aceptes desde el correo.`,
+            email: {
+              template: 'goal_contribution_accept',
+              data: {
+                goalName: goal.name,
+                amount: scheduled.amount,
+                period: scheduled.period,
+                acceptUrl: createGoalContributionUrl(userId, goal.id, scheduled.period),
+                unsubscribeUrl: createUnsubscribeUrl(userId),
+              },
+            },
+          })
+          continue
+        }
+
         const saved = round2(goal.saved)
         const target = round2(goal.targetAmount)
         const suggestion = goal.reminderAmount == null ? null : round2(goal.reminderAmount)
@@ -238,6 +289,54 @@ export const NotificationService = {
     return notifications
   },
 
+  /**Crea las filas pending del mes, una por meta programada elegible. */
+  async ensureScheduledContributions(userId: string, now: Date) {
+    const goals = await NotificationRepository.findGoalsWithReminder(userId)
+    let created = 0
+    let skipped = 0
+
+    for (const goal of goals) {
+      if (!goal.contributionScheduled || goal.reminderDay !== now.getUTCDate()) continue
+
+      const scheduled = scheduledContributionFor(goal, now)
+      const key = `goal_contribution:${goal.id}:${now.toISOString().slice(0, 7)}`
+
+      if (!scheduled) {
+        skipped += 1
+        logger.info('Aportación programada omitida', { userId, goalId: goal.id, key, reason: 'not_eligible' })
+        continue
+      }
+
+      const wasCreated = await NotificationRepository.ensureGoalContribution({
+        userId,
+        goalId: goal.id,
+        ...scheduled,
+      })
+
+      if (wasCreated) {
+        created += 1
+        logger.info('Aportación programada generada', {
+          userId,
+          goalId: goal.id,
+          period: scheduled.period,
+          key,
+          result: 'created',
+        })
+      } else {
+        skipped += 1
+        logger.info('Aportación programada ya existente', {
+          userId,
+          goalId: goal.id,
+          period: scheduled.period,
+          key,
+          result: 'skipped',
+        })
+      }
+    }
+
+    return { created, skipped }
+  },
+
   async list(userId: string): Promise<NotificationsResponse> {
     const rules = await NotificationService.getRules(userId)
     const notifications = await NotificationService.collectNotifications(userId, rules, new Date())
@@ -256,10 +355,23 @@ export const NotificationService = {
   ): Promise<ProcessResult> {
     const users = await NotificationRepository.findUsersWithNotifications()
     const now = new Date()
-    const result: ProcessResult = { processed: 0, emailsSent: 0, emailsFailed: 0 }
+    const result: ProcessResult = {
+      processed: 0,
+      emailsSent: 0,
+      emailsFailed: 0,
+      contributionsCreated: 0,
+      contributionsSkipped: 0,
+    }
 
     for (const user of users) {
       const rules = await NotificationService.getRules(user.id)
+
+      if (rules.goalReminder.enabled) {
+        const contributions = await NotificationService.ensureScheduledContributions(user.id, now)
+        result.contributionsCreated += contributions.created
+        result.contributionsSkipped += contributions.skipped
+      }
+
       const notifications = await NotificationService.collectNotifications(user.id, rules, now)
       const created = await NotificationRepository.createNotifications(user.id, notifications)
       result.processed += created.length
