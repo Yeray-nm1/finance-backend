@@ -1,3 +1,8 @@
+## [1.8.2] - 2026-11-18
+
+- 52d5bfb Merge pull request #28 from Yeray-nm1/feature/ynm-password-reset
+- 0af4807 feat: recuperación de contraseña por email
+
 ## [1.8.1] - 2026-11-18
 
 - 0561f19 Merge pull request #27 from Yeray-nm1/feature/ynm-auto-deploy
