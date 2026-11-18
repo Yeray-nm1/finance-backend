@@ -147,4 +147,36 @@ export const NotificationRepository = {
       count: rows.length,
     }
   },
+
+  /** Metas activas con recordatorio configurado, con el total ya aportado. */
+  async findGoalsWithReminder(userId: string) {
+    const goals = await prisma.savingsGoal.findMany({
+      where: { userId, isArchived: false, reminderDay: { not: null } },
+      select: {
+        id: true,
+        name: true,
+        targetAmount: true,
+        reminderDay: true,
+        reminderAmount: true,
+      },
+      orderBy: { name: 'asc' },
+    })
+
+    if (goals.length === 0) return []
+
+    const totals = await prisma.transaction.groupBy({
+      by: ['goalId'],
+      where: {
+        userId,
+        type: 'transfer',
+        goalId: { in: goals.map((goal) => goal.id) },
+      },
+      _sum: { amount: true },
+    })
+    const saved = new Map(
+      totals.map((row) => [row.goalId, Math.abs(row._sum.amount ?? 0)])
+    )
+
+    return goals.map((goal) => ({ ...goal, saved: saved.get(goal.id) ?? 0 }))
+  },
 }

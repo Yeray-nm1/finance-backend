@@ -34,6 +34,26 @@ function validateTargetAmount(value: unknown): number {
   return round2(value)
 }
 
+function validateReminderDay(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 28) {
+    throw new BadRequestError('El día del recordatorio debe estar entre 1 y 28')
+  }
+
+  return value
+}
+
+function validateReminderAmount(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new BadRequestError('El importe sugerido debe ser un número mayor que cero')
+  }
+
+  return round2(value)
+}
+
 function parseTargetDate(value: unknown): Date | null {
   if (value === null || value === undefined || value === '') return null
 
@@ -111,6 +131,8 @@ function serializeGoal(
     isArchived: boolean
     createdAt: Date
     updatedAt: Date
+    reminderDay?: number | null
+    reminderAmount?: number | null
   },
   saved: number,
   contributionsCount: number
@@ -132,6 +154,8 @@ function serializeGoal(
     isArchived: goal.isArchived,
     createdAt: goal.createdAt,
     updatedAt: goal.updatedAt,
+    reminderDay: goal.reminderDay ?? null,
+    reminderAmount: goal.reminderAmount == null ? null : round2(goal.reminderAmount),
     saved: totalSaved,
     progress,
     remaining,
@@ -192,13 +216,22 @@ export const GoalService = {
 
   async create(
     userId: string,
-    dto: { name: unknown; targetAmount: unknown; targetDate?: unknown; accountId?: unknown }
+    dto: {
+      name: unknown
+      targetAmount: unknown
+      targetDate?: unknown
+      accountId?: unknown
+      reminderDay?: unknown
+      reminderAmount?: unknown
+    }
   ) {
     const goal = await GoalRepository.create(userId, {
       name: normalizeName(dto.name),
       targetAmount: validateTargetAmount(dto.targetAmount),
       targetDate: parseTargetDate(dto.targetDate),
       accountId: await resolveSavingsAccount(userId, dto.accountId),
+      reminderDay: validateReminderDay(dto.reminderDay),
+      reminderAmount: validateReminderAmount(dto.reminderAmount),
     })
 
     return serializeGoal(goal, 0, 0)
@@ -213,6 +246,8 @@ export const GoalService = {
       targetDate?: unknown
       accountId?: unknown
       isArchived?: unknown
+      reminderDay?: unknown
+      reminderAmount?: unknown
     }
   ) {
     const existing = await GoalRepository.findById(userId, id)
@@ -230,6 +265,10 @@ export const GoalService = {
       data.accountId = await resolveSavingsAccount(userId, dto.accountId)
     }
     if (dto.isArchived !== undefined) data.isArchived = dto.isArchived === true
+    if (dto.reminderDay !== undefined) data.reminderDay = validateReminderDay(dto.reminderDay)
+    if (dto.reminderAmount !== undefined) {
+      data.reminderAmount = validateReminderAmount(dto.reminderAmount)
+    }
 
     const goal = await GoalRepository.update(userId, id, data)
 
