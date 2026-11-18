@@ -264,8 +264,18 @@ export const NotificationService = {
       const created = await NotificationRepository.createNotifications(user.id, notifications)
       result.processed += created.length
 
-      for (const notification of created) {
-        if (!emailEnabledFor(notification.type, rules) || !notification.email) continue
+      const emailable = notifications.filter(
+        (notification) => notification.email && emailEnabledFor(notification.type, rules)
+      )
+      if (emailable.length === 0) continue
+
+      const pending = await NotificationRepository.findPendingEmailKeys(
+        user.id,
+        emailable.map((notification) => notification.key)
+      )
+
+      for (const notification of emailable) {
+        if (!pending.has(notification.key) || !notification.email) continue
 
         try {
           await sender.send({
@@ -275,6 +285,7 @@ export const NotificationService = {
             data: notification.email.data,
             idempotencyKey: `finance:${notification.key}`,
           })
+          await NotificationRepository.markEmailsSent(user.id, [notification.key])
           result.emailsSent += 1
         } catch (error) {
           result.emailsFailed += 1

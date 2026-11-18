@@ -9,6 +9,8 @@ vi.mock('../src/modules/notifications/notifications.repository', () => ({
     findLastCharge: vi.fn(),
     sumExpenses: vi.fn(),
     createNotifications: vi.fn(),
+    findPendingEmailKeys: vi.fn(),
+    markEmailsSent: vi.fn(),
     disableEmails: vi.fn(),
   },
 }))
@@ -58,6 +60,10 @@ beforeEach(() => {
   repo.findLastCharge.mockResolvedValue(new Date('2026-11-10T00:00:00.000Z') as never)
   repo.sumExpenses.mockResolvedValue({ total: 42.5, count: 3 } as never)
   repo.createNotifications.mockImplementation(async (_userId, items) => items as never)
+  repo.findPendingEmailKeys.mockResolvedValue(
+    new Set(['subscription_due:s1:2026-11-17', 'summary:weekly:2026-11-16']) as never
+  )
+  repo.markEmailsSent.mockResolvedValue(undefined as never)
 })
 
 afterEach(() => {
@@ -123,14 +129,15 @@ describe('WI-2 · endpoint interno /process', () => {
     expect(sender.send).not.toHaveBeenCalled()
   })
 
-  it('reutiliza la misma clave de idempotencia si el aviso ya existía', async () => {
+  it('envía el correo pendiente aunque el aviso in-app ya existiera', async () => {
     repo.createNotifications.mockResolvedValue([] as never)
     const sender = senderStub()
 
     const result = await NotificationService.processAll(sender)
 
-    expect(result).toEqual({ processed: 0, emailsSent: 0, emailsFailed: 0 })
-    expect(sender.send).not.toHaveBeenCalled()
+    expect(result).toEqual({ processed: 0, emailsSent: 1, emailsFailed: 0 })
+    expect(sender.send).toHaveBeenCalledOnce()
+    expect(repo.markEmailsSent).toHaveBeenCalledWith('u1', ['subscription_due:s1:2026-11-17'])
   })
 
   it('no pierde los avisos in-app si el micro falla', async () => {
@@ -141,16 +148,17 @@ describe('WI-2 · endpoint interno /process', () => {
     expect(result).toEqual({ processed: 2, emailsSent: 0, emailsFailed: 1 })
   })
 
-  it('la clave de idempotencia es estable entre ejecuciones', async () => {
+  it('no reenvía el correo en el siguiente barrido tras marcarlo como enviado', async () => {
     const first = senderStub()
     const second = senderStub()
 
     await NotificationService.processAll(first)
+    repo.findPendingEmailKeys.mockResolvedValue(new Set() as never)
     await NotificationService.processAll(second)
 
-    expect(vi.mocked(first.send).mock.calls[0][0].idempotencyKey).toBe(
-      vi.mocked(second.send).mock.calls[0][0].idempotencyKey
-    )
+    expect(first.send).toHaveBeenCalledOnce()
+    expect(second.send).not.toHaveBeenCalled()
+    expect(repo.markEmailsSent).toHaveBeenCalledWith('u1', ['subscription_due:s1:2026-11-17'])
   })
 })
 

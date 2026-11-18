@@ -10,6 +10,8 @@ vi.mock('../src/modules/notifications/notifications.repository', () => ({
     sumExpenses: vi.fn(),
     findGoalsWithReminder: vi.fn(),
     createNotifications: vi.fn(),
+    findPendingEmailKeys: vi.fn(),
+    markEmailsSent: vi.fn(),
     disableEmails: vi.fn(),
   },
 }))
@@ -88,6 +90,8 @@ beforeEach(() => {
   repo.findRules.mockResolvedValue(baseRules as never)
   repo.findGoalsWithReminder.mockResolvedValue(goalsWithReminder() as never)
   repo.createNotifications.mockImplementation(async (_userId, items) => items as never)
+  repo.findPendingEmailKeys.mockResolvedValue(new Set(['goal_reminder:g1:2026-11']) as never)
+  repo.markEmailsSent.mockResolvedValue(undefined as never)
 })
 
 afterEach(() => {
@@ -216,17 +220,19 @@ describe('recordatorio mensual de metas · avisos', () => {
     expect(sender.send).not.toHaveBeenCalled()
   })
 
-  it('usa una clave mensual estable aunque el job se ejecute varias veces', async () => {
+  it('no reenvía el recordatorio mensual tras marcarlo como enviado', async () => {
     repo.findRules.mockResolvedValue([...baseRules, goalReminderRule(true, true)] as never)
     repo.findUsersWithNotifications.mockResolvedValue([{ id: 'u1', email: 'user@example.com' }] as never)
     const first = senderStub()
     const second = senderStub()
 
     await NotificationService.processAll(first)
+    repo.findPendingEmailKeys.mockResolvedValue(new Set() as never)
     await NotificationService.processAll(second)
 
-    expect(vi.mocked(first.send).mock.calls[0][0].idempotencyKey).toBe(
-      vi.mocked(second.send).mock.calls[0][0].idempotencyKey
+    expect(first.send).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'finance:goal_reminder:g1:2026-11' })
     )
+    expect(second.send).not.toHaveBeenCalled()
   })
 })

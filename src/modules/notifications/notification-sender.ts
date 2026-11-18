@@ -40,6 +40,9 @@ export class HttpNotificationSender implements NotificationSender {
         'X-Api-Key': this.apiKey,
       },
       body: JSON.stringify(message),
+      // El plan free de Render duerme el micro: sin timeout el request se
+      // queda colgado hasta que el proxy corta y el error no es diagnósticable.
+      signal: AbortSignal.timeout(10_000),
     })
 
     if (!response.ok) {
