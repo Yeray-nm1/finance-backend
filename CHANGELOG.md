@@ -1,3 +1,8 @@
+## [1.10.1] - 2026-11-18
+
+- c35110a Merge pull request #32 from Yeray-nm1/fix/ynm-goal-contribution-followup
+- 67355a5 fix: sesión y acciones en notificaciones de aportación
+
 ## [1.10.0] - 2026-11-18
 
 - c19e563 Merge pull request #31 from Yeray-nm1/feature/ynm-goal-contribution
