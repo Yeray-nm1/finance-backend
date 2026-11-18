@@ -5,12 +5,14 @@ import { authMiddleware } from '../../middlewares/auth.middleware'
 
 const router = Router()
 
-function rateLimitHandler(_req: Request, res: Response) {
-  const reset = Number(res.getHeader('RateLimit-Reset'))
-  const minutes = Number.isFinite(reset) ? Math.max(1, Math.ceil(reset / 60)) : 15
-  res.status(429).json({
-    error: `Demasiados intentos fallidos. Intenta de nuevo en ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}.`,
-  })
+function rateLimitHandler(prefix = 'Demasiados intentos fallidos.') {
+  return (_req: Request, res: Response) => {
+    const reset = Number(res.getHeader('RateLimit-Reset'))
+    const minutes = Number.isFinite(reset) ? Math.max(1, Math.ceil(reset / 60)) : 15
+    res.status(429).json({
+      error: `${prefix} Intenta de nuevo en ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}.`,
+    })
+  }
 }
 
 // Solo cuentan los intentos fallidos (4xx): un login correcto no consume cuota.
@@ -20,7 +22,7 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: rateLimitHandler,
+  handler: rateLimitHandler(),
 })
 
 // El registro exitoso tampoco debe gastar el límite; solo los fallidos (emails duplicados, etc.).
@@ -30,11 +32,31 @@ const registerLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: rateLimitHandler,
+  handler: rateLimitHandler(),
+})
+
+// La solicitud de enlace y el canje cuentan todas las peticiones: son baratas
+// pero un atacante no debe poder inundar la bandeja de entrada ni probar tokens.
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler('Demasiadas solicitudes.'),
+})
+
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler('Demasiados intentos.'),
 })
 
 router.post('/register', registerLimiter, AuthController.register)
 router.post('/login', loginLimiter, AuthController.login)
+router.post('/forgot-password', forgotPasswordLimiter, AuthController.forgotPassword)
+router.post('/reset-password', resetPasswordLimiter, AuthController.resetPassword)
 router.get('/me', authMiddleware, AuthController.me)
 router.put('/password', authMiddleware, loginLimiter, AuthController.changePassword)
 router.post('/logout', AuthController.logout)

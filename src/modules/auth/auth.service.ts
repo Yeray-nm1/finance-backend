@@ -3,6 +3,13 @@ import jwt from 'jsonwebtoken'
 import { config } from '../../config/env'
 import { UserRepository, RegisterDTO, LoginDTO } from './auth.repository'
 import { ConflictError, BadRequestError } from '../../core/errors'
+import { FINANCE_FROM_NAME, NotificationSender, notificationSender } from '../notifications/notification-sender'
+import {
+  decodeResetToken,
+  passwordFingerprint,
+  resetTokenIdempotencyKey,
+  signResetToken,
+} from './reset-token'
 
 const SALT_ROUNDS = 10
 const DEFAULT_SESSION_MS = 7 * 24 * 60 * 60 * 1000
@@ -83,6 +90,36 @@ export const AuthService = {
 
     if (currentPassword === newPassword) {
       throw new BadRequestError('La nueva contraseña debe ser distinta a la actual')
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS)
+    await UserRepository.updatePassword(user.id, hashedPassword)
+  },
+
+  async requestPasswordReset(email: string, sender: NotificationSender = notificationSender) {
+    const user = await UserRepository.findByEmail(email)
+
+    // No revelamos si el email está registrado: siempre responde lo mismo.
+    if (!user) return
+
+    const token = signResetToken(user.id, user.password)
+    const resetUrl = `${config.frontendUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`
+
+    await sender.send({
+      to: user.email,
+      fromName: FINANCE_FROM_NAME,
+      template: 'password_reset',
+      data: { resetUrl },
+      idempotencyKey: resetTokenIdempotencyKey(token),
+    })
+  },
+
+  async resetPassword(token: string, newPassword: string) {
+    const payload = decodeResetToken(token)
+    const user = await UserRepository.findById(payload.sub)
+
+    if (!user || payload.pwd !== passwordFingerprint(user.password)) {
+      throw new BadRequestError('Enlace de restablecimiento no válido o caducado')
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS)
