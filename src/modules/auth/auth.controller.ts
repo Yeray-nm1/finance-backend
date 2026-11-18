@@ -17,7 +17,7 @@ function setSessionCookie(res: Response, token: string, expiresAt: string): void
   res.cookie('finance_token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     expires: new Date(expiresAt),
   })
 }

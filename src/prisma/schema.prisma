@@ -244,6 +244,8 @@ model Notification {
   type      String
   title     String
   body      String
+  /// Ruta de la acción que el usuario puede ejecutar desde la notificación.
+  actionUrl String?
 
   createdAt DateTime @default(now())
   readAt    DateTime?

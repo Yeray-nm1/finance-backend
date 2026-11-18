@@ -44,6 +44,8 @@ export interface NotificationItem {
   body: string
   createdAt: string
   readAt: string | null
+  /** Ruta de la acción que permite completar el aviso (por ejemplo, aceptar una aportación). */
+  actionUrl: string | null
 }
 
 export interface NotificationsResponse {

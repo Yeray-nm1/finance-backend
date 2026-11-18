@@ -47,9 +47,18 @@ export function verifyGoalContributionToken(token: string): GoalContributionToke
   }
 }
 
-export function createGoalContributionUrl(userId: string, goalId: string, period: string): string {
-  const base = config.frontendUrl.replace(/\/$/, '')
-  return `${base}/goals/aceptar?token=${encodeURIComponent(
+/** Ruta relativa de aceptación: sirve para el correo y para la acción in-app. */
+export function createGoalContributionPath(
+  userId: string,
+  goalId: string,
+  period: string
+): string {
+  return `/goals/aceptar?token=${encodeURIComponent(
     createGoalContributionToken(userId, goalId, period)
   )}`
+}
+
+export function createGoalContributionUrl(userId: string, goalId: string, period: string): string {
+  const base = config.frontendUrl.replace(/\/$/, '')
+  return `${base}${createGoalContributionPath(userId, goalId, period)}`
 }

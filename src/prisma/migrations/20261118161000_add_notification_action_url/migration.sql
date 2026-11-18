@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Notification" ADD COLUMN     "actionUrl" TEXT;
