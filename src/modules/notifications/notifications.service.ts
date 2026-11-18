@@ -3,7 +3,7 @@ import { config } from '../../config/env'
 import { BadRequestError, NotFoundError } from '../../core/errors'
 import { logger } from '../../core/logger'
 import { nextChargeDate } from '../../utils/subscription-dates'
-import { createGoalContributionUrl } from '../../utils/goal-contribution-token'
+import { createGoalContributionPath } from '../../utils/goal-contribution-token'
 import { createUnsubscribeUrl } from '../../utils/unsubscribe'
 import { NotificationRepository, NewNotification } from './notifications.repository'
 import { FINANCE_FROM_NAME, notificationSender, NotificationSender } from './notification-sender'
@@ -243,18 +243,20 @@ export const NotificationService = {
 
         const scheduled = scheduledContributionFor(goal, now)
         if (scheduled) {
+          const acceptPath = createGoalContributionPath(userId, goal.id, scheduled.period)
           notifications.push({
             key: `goal_contribution:${goal.id}:${scheduled.period}`,
             type: 'goal_contribution',
             title: `Aportación programada: ${goal.name}`,
             body: `Tienes una aportación de ${money.format(scheduled.amount)} pendiente de confirmar para «${goal.name}». No se cobrará nada hasta que la aceptes desde el correo.`,
+            actionUrl: acceptPath,
             email: {
               template: 'goal_contribution_accept',
               data: {
                 goalName: goal.name,
                 amount: scheduled.amount,
                 period: scheduled.period,
-                acceptUrl: createGoalContributionUrl(userId, goal.id, scheduled.period),
+                acceptUrl: `${config.frontendUrl.replace(/\/$/, '')}${acceptPath}`,
                 unsubscribeUrl: createUnsubscribeUrl(userId),
               },
             },

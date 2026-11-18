@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../core/db'
+import { createGoalContributionPath } from '../../utils/goal-contribution-token'
 import { normalizeDescription } from '../../utils/normalize'
 import type {
   NotificationEmailPayload,
@@ -12,7 +13,25 @@ export interface NewNotification {
   type: NotificationType
   title: string
   body: string
+  actionUrl?: string | null
   email?: NotificationEmailPayload
+}
+
+/**
+ * Los avisos creados antes de existir `actionUrl` no lo tienen guardado, pero su
+ * clave conserva la meta y el periodo, así que podemos recompondérlo al listar.
+ */
+function actionUrlForRow(row: {
+  key: string
+  type: string
+  userId: string
+  actionUrl: string | null
+}): string | null {
+  if (row.actionUrl) return row.actionUrl
+  if (row.type !== 'goal_contribution') return null
+
+  const match = /^goal_contribution:([^:]+):(\d{4}-\d{2})$/.exec(row.key)
+  return match ? createGoalContributionPath(row.userId, match[1], match[2]) : null
 }
 
 type RuleData = {
@@ -54,6 +73,7 @@ export const NotificationRepository = {
         type: item.type,
         title: item.title,
         body: item.body,
+        actionUrl: item.actionUrl ?? null,
         userId,
       })),
       skipDuplicates: true,
@@ -112,6 +132,7 @@ export const NotificationRepository = {
       body: row.body,
       createdAt: row.createdAt.toISOString(),
       readAt: row.readAt ? row.readAt.toISOString() : null,
+      actionUrl: actionUrlForRow(row),
     }))
   },
 

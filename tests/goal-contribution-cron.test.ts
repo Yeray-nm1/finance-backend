@@ -95,6 +95,14 @@ describe('aportación programada · generación en el barrido', () => {
     expect(notifications.some((item) => item.type === 'goal_reminder')).toBe(false)
   })
 
+  it('FIX-2 el aviso in-app abre la misma aceptación que el correo', async () => {
+    const notifications = await NotificationService.collectNotifications('u1', rules, NOW)
+    const emailUrl = new URL(String(notifications[0].email?.data.acceptUrl))
+
+    expect(notifications[0].actionUrl).toMatch(/^\/goals\/aceptar\?token=/)
+    expect(notifications[0].actionUrl).toBe(`${emailUrl.pathname}${emailUrl.search}`)
+  })
+
   it('CA-3.1 el barrido congela importe y destino y devuelve los contadores', async () => {
     const sender = senderStub()
 
