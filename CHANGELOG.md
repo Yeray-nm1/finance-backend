@@ -1,3 +1,8 @@
+## [1.8.1] - 2026-11-18
+
+- 0561f19 Merge pull request #27 from Yeray-nm1/feature/ynm-auto-deploy
+- 0f15fe4 ci: despliega en Render tras pasar la CI
+
 ## [1.8.0] - 2026-11-18
 
 - 46c5fc2 Merge pull request #26 from Yeray-nm1/feature/ynm-email-from-name
