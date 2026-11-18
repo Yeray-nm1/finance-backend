@@ -1,3 +1,8 @@
+## [1.8.0] - 2026-11-18
+
+- 46c5fc2 Merge pull request #26 from Yeray-nm1/feature/ynm-email-from-name
+- 12166c9 feat: identifica los emails con el nombre de la app
+
 ## [1.7.2] - 2026-11-17
 
 - b3e4cb8 Merge pull request #25 from Yeray-nm1/feature/ynm-email-wi4-schedule
