@@ -1,3 +1,8 @@
+## [1.10.0] - 2026-11-18
+
+- c19e563 Merge pull request #31 from Yeray-nm1/feature/ynm-goal-contribution
+- ae6f285 feat: aportación programada a metas con aceptación por correo
+
 ## [1.9.1] - 2026-11-18
 
 - 15a8ed8 Merge pull request #30 from Yeray-nm1/fix/ynm-goal-reminder-email-retry
