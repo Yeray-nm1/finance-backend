@@ -217,6 +217,8 @@ model Notification {
 
   createdAt DateTime @default(now())
   readAt    DateTime?
+  /// Momento en que se entregó el correo asociado; null significa que sigue pendiente.
+  emailSentAt DateTime?
 
   user      User @relation(fields: [userId], references: [id])
 

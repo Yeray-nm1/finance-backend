@@ -20,6 +20,17 @@ describe('WI-4 · workflow schedule de avisos por email', () => {
     expect(content).toContain('workflow_dispatch:')
   })
 
+  it('despierta el micro antes de procesar para sobrevivir al cold start de Render', () => {
+    const content = workflow()
+    const wakeIndex = content.indexOf('Despertar el micro de email')
+    const processIndex = content.indexOf('Procesar avisos y enviar correos')
+
+    expect(wakeIndex).toBeGreaterThan(-1)
+    expect(wakeIndex).toBeLessThan(processIndex)
+    expect(content).toContain('email-service-ytjp.onrender.com/health')
+    expect(content).toContain('--retry 12')
+  })
+
   it('invoca el endpoint interno con el secreto de GitHub sin exponerlo en el comando', () => {
     const content = workflow()
     expect(content).toContain('CRON_SECRET: ${{ secrets.CRON_SECRET }}')

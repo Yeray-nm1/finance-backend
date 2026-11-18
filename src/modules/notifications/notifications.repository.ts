@@ -60,6 +60,29 @@ export const NotificationRepository = {
     return created
   },
 
+  /**
+   * Claves cuyo correo aún no se ha entregado. Se consulta después de crear los
+   * avisos para que un aviso generado por `/notifications` no cancele el email.
+   */
+  async findPendingEmailKeys(userId: string, keys: string[]): Promise<Set<string>> {
+    if (keys.length === 0) return new Set()
+
+    const rows = await prisma.notification.findMany({
+      where: { userId, key: { in: keys }, emailSentAt: null },
+      select: { key: true },
+    })
+    return new Set(rows.map((row) => row.key))
+  },
+
+  async markEmailsSent(userId: string, keys: string[]): Promise<void> {
+    if (keys.length === 0) return
+
+    await prisma.notification.updateMany({
+      where: { userId, key: { in: keys } },
+      data: { emailSentAt: new Date() },
+    })
+  },
+
   /** Usuarios con al menos una regla activa: son los que debe barrer el job. */
   findUsersWithNotifications() {
     return prisma.user.findMany({

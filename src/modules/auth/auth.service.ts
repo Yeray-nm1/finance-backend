@@ -4,6 +4,7 @@ import { config } from '../../config/env'
 import { UserRepository, RegisterDTO, LoginDTO } from './auth.repository'
 import { ConflictError, BadRequestError } from '../../core/errors'
 import { FINANCE_FROM_NAME, NotificationSender, notificationSender } from '../notifications/notification-sender'
+import { logger } from '../../core/logger'
 import {
   decodeResetToken,
   passwordFingerprint,
@@ -105,13 +106,23 @@ export const AuthService = {
     const token = signResetToken(user.id, user.password)
     const resetUrl = `${config.frontendUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`
 
-    await sender.send({
-      to: user.email,
-      fromName: FINANCE_FROM_NAME,
-      template: 'password_reset',
-      data: { resetUrl },
-      idempotencyKey: resetTokenIdempotencyKey(token),
-    })
+    try {
+      await sender.send({
+        to: user.email,
+        fromName: FINANCE_FROM_NAME,
+        template: 'password_reset',
+        data: { resetUrl },
+        idempotencyKey: resetTokenIdempotencyKey(token),
+      })
+    } catch (error) {
+      // La petición sigue fallando en la API (error visible), pero el log indica
+      // si el problema es configuración, credenciales del micro o caída del micro.
+      logger.error('No se pudo enviar el correo de restablecimiento', {
+        userId: user.id,
+        error,
+      })
+      throw error
+    }
   },
 
   async resetPassword(token: string, newPassword: string) {

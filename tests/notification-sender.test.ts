@@ -35,6 +35,7 @@ describe('HttpNotificationSender', () => {
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(JSON.parse(String(init.body))).toEqual(message)
+    expect(init.signal).toBeInstanceOf(AbortSignal)
   })
 
   it('falla cerrado si no hay URL o key del micro', async () => {
