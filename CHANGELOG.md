@@ -1,3 +1,8 @@
+## [1.9.1] - 2026-11-18
+
+- 15a8ed8 Merge pull request #30 from Yeray-nm1/fix/ynm-goal-reminder-email-retry
+- 6dbacb6 fix: reenviar correo aunque exista el aviso in-app y loguear fallo de recuperacion
+
 ## [1.9.0] - 2026-11-18
 
 - 771f3af Merge pull request #29 from Yeray-nm1/feature/ynm-goal-reminder
