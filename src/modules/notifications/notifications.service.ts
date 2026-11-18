@@ -4,7 +4,7 @@ import { logger } from '../../core/logger'
 import { nextChargeDate } from '../../utils/subscription-dates'
 import { createUnsubscribeUrl } from '../../utils/unsubscribe'
 import { NotificationRepository, NewNotification } from './notifications.repository'
-import { notificationSender, NotificationSender } from './notification-sender'
+import { FINANCE_FROM_NAME, notificationSender, NotificationSender } from './notification-sender'
 import {
   DAYS_BEFORE,
   DaysBefore,
@@ -211,6 +211,7 @@ export const NotificationService = {
         try {
           await sender.send({
             to: user.email,
+            fromName: FINANCE_FROM_NAME,
             template: notification.email.template,
             data: notification.email.data,
             idempotencyKey: `finance:${notification.key}`,

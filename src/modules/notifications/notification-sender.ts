@@ -2,8 +2,12 @@ import { config } from '../../config/env'
 
 export type EmailTemplateName = 'subscription_due' | 'spending_summary'
 
+/** Nombre visible con el que el dashboard financiero se identifica ante el micro de email. */
+export const FINANCE_FROM_NAME = 'Finance Dashboard'
+
 export interface NotificationEmail {
   to: string
+  fromName: string
   template: EmailTemplateName
   data: Record<string, unknown>
   idempotencyKey: string
