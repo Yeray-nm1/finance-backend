@@ -29,3 +29,24 @@ jobs:
       - run: pnpm test
 
       - run: pnpm build
+
+  deploy:
+    name: Deploy en Render
+    needs: [build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-finance-backend
+      cancel-in-progress: false
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+    steps:
+      - name: Verificar configuración del deploy hook
+        if: env.RENDER_DEPLOY_HOOK_URL == ''
+        run: |
+          echo "::error::Falta el secreto RENDER_DEPLOY_HOOK_URL"
+          exit 1
+
+      - name: Disparar deploy hook de Render
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        run: curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK_URL"
