@@ -196,7 +196,12 @@ export const NotificationRepository = {
   /** Metas activas con recordatorio configurado, con el total ya aportado. */
   async findGoalsWithReminder(userId: string) {
     const goals = await prisma.savingsGoal.findMany({
-      where: { userId, isArchived: false, reminderDay: { not: null } },
+      where: {
+        userId,
+        isArchived: false,
+        reminderEnabled: true,
+        reminderDay: { not: null },
+      },
       select: {
         id: true,
         name: true,
@@ -204,7 +209,7 @@ export const NotificationRepository = {
         reminderDay: true,
         reminderAmount: true,
         accountId: true,
-        contributionScheduled: true,
+        reminderEnabled: true,
       },
       orderBy: { name: 'asc' },
     })
@@ -235,7 +240,7 @@ export const NotificationRepository = {
     userId: string
     goalId: string
     period: string
-    amount: number
+    amount: number | null
     goalAccountId: string
   }): Promise<boolean> {
     const where = { goalId_period: { goalId: data.goalId, period: data.period } }

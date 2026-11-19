@@ -92,12 +92,12 @@ interface GoalForReminder {
   reminderAmount: number | null
   saved: number
   accountId?: string | null
-  contributionScheduled?: boolean
+  reminderEnabled?: boolean
 }
 
-/** Aportación programada que debe proponerse este mes, o null si la meta no es elegible. */
-function scheduledContributionFor(goal: GoalForReminder, now: Date) {
-  if (!goal.contributionScheduled) return null
+/** Aportación que debe proponerse este mes, o null si la meta no es elegible. */
+function reminderContributionFor(goal: GoalForReminder, now: Date) {
+  if (!goal.reminderEnabled) return null
   if (goal.reminderDay !== now.getUTCDate()) return null
   if (!goal.accountId) return null
 
@@ -105,7 +105,7 @@ function scheduledContributionFor(goal: GoalForReminder, now: Date) {
   if (saved >= round2(goal.targetAmount)) return null
 
   const amount = goal.reminderAmount == null ? null : round2(goal.reminderAmount)
-  if (amount === null || amount <= 0) return null
+  if (amount !== null && amount <= 0) return null
 
   return { period: now.toISOString().slice(0, 7), amount, goalAccountId: goal.accountId }
 }
@@ -236,54 +236,27 @@ export const NotificationService = {
 
     if (rules.goalReminder.enabled) {
       const goals = await NotificationRepository.findGoalsWithReminder(userId)
-      const monthKey = now.toISOString().slice(0, 7)
 
       for (const goal of goals) {
-        if (goal.reminderDay !== now.getUTCDate()) continue
+        const reminder = reminderContributionFor(goal, now)
+        if (!reminder) continue
 
-        const scheduled = scheduledContributionFor(goal, now)
-        if (scheduled) {
-          const acceptPath = createGoalContributionPath(userId, goal.id, scheduled.period)
-          notifications.push({
-            key: `goal_contribution:${goal.id}:${scheduled.period}`,
-            type: 'goal_contribution',
-            title: `Aportación programada: ${goal.name}`,
-            body: `Tienes una aportación de ${money.format(scheduled.amount)} pendiente de confirmar para «${goal.name}». No se cobrará nada hasta que la aceptes desde el correo.`,
-            actionUrl: acceptPath,
-            email: {
-              template: 'goal_contribution_accept',
-              data: {
-                goalName: goal.name,
-                amount: scheduled.amount,
-                period: scheduled.period,
-                acceptUrl: `${config.frontendUrl.replace(/\/$/, '')}${acceptPath}`,
-                unsubscribeUrl: createUnsubscribeUrl(userId),
-              },
-            },
-          })
-          continue
-        }
-
-        const saved = round2(goal.saved)
-        const target = round2(goal.targetAmount)
-        const suggestion = goal.reminderAmount == null ? null : round2(goal.reminderAmount)
-        const data: Record<string, unknown> = {
-          goalName: goal.name,
-          saved,
-          target,
-          goalsUrl: `${config.frontendUrl.replace(/\/$/, '')}/goals`,
-          unsubscribeUrl: createUnsubscribeUrl(userId),
-        }
-        if (suggestion != null) data.suggestedAmount = suggestion
-
+        const acceptPath = createGoalContributionPath(userId, goal.id, reminder.period)
         notifications.push({
-          key: `goal_reminder:${goal.id}:${monthKey}`,
-          type: 'goal_reminder',
+          key: `goal_contribution:${goal.id}:${reminder.period}`,
+          type: 'goal_contribution',
           title: `Recordatorio de meta: ${goal.name}`,
-          body: `Llevas ahorrados ${money.format(saved)} de ${money.format(target)}.${
-            suggestion == null ? '' : ` Aportación sugerida: ${money.format(suggestion)}.`
-          } Confirma tu aportación manual en Metas.`,
-          email: { template: 'goal_reminder', data },
+          body: 'Tienes una aportación pendiente. Confírmala desde aquí.',
+          actionUrl: acceptPath,
+          email: {
+            template: 'goal_contribution_accept',
+            data: {
+              goalName: goal.name,
+              period: reminder.period,
+              acceptUrl: `${config.frontendUrl.replace(/\/$/, '')}${acceptPath}`,
+              unsubscribeUrl: createUnsubscribeUrl(userId),
+            },
+          },
         })
       }
     }
@@ -291,45 +264,43 @@ export const NotificationService = {
     return notifications
   },
 
-  /**Crea las filas pending del mes, una por meta programada elegible. */
+  /** Crea la fila pendiente del mes, una por meta con aviso elegible. */
   async ensureScheduledContributions(userId: string, now: Date) {
     const goals = await NotificationRepository.findGoalsWithReminder(userId)
     let created = 0
     let skipped = 0
 
     for (const goal of goals) {
-      if (!goal.contributionScheduled || goal.reminderDay !== now.getUTCDate()) continue
-
-      const scheduled = scheduledContributionFor(goal, now)
+      const reminder = reminderContributionFor(goal, now)
       const key = `goal_contribution:${goal.id}:${now.toISOString().slice(0, 7)}`
 
-      if (!scheduled) {
+      if (!reminder) {
         skipped += 1
-        logger.info('Aportación programada omitida', { userId, goalId: goal.id, key, reason: 'not_eligible' })
+        logger.info('Aviso de meta omitido', { userId, goalId: goal.id, key, reason: 'not_eligible' })
         continue
       }
 
       const wasCreated = await NotificationRepository.ensureGoalContribution({
         userId,
         goalId: goal.id,
-        ...scheduled,
+        ...reminder,
       })
 
       if (wasCreated) {
         created += 1
-        logger.info('Aportación programada generada', {
+        logger.info('Aviso de meta generado', {
           userId,
           goalId: goal.id,
-          period: scheduled.period,
+          period: reminder.period,
           key,
           result: 'created',
         })
       } else {
         skipped += 1
-        logger.info('Aportación programada ya existente', {
+        logger.info('Aviso de meta ya existente', {
           userId,
           goalId: goal.id,
-          period: scheduled.period,
+          period: reminder.period,
           key,
           result: 'skipped',
         })

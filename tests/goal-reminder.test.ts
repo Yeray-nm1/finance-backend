@@ -13,6 +13,7 @@ vi.mock('../src/modules/notifications/notifications.repository', () => ({
     findPendingEmailKeys: vi.fn(),
     markEmailsSent: vi.fn(),
     disableEmails: vi.fn(),
+    ensureGoalContribution: vi.fn(),
   },
 }))
 
@@ -21,6 +22,7 @@ import { NotificationService } from '../src/modules/notifications/notifications.
 
 const repo = vi.mocked(NotificationRepository)
 const NOW = new Date('2026-11-18T12:00:00.000Z')
+const PERIOD = '2026-11'
 
 const baseRules = [
   {
@@ -67,6 +69,8 @@ function goalsWithReminder() {
       reminderDay: 18,
       reminderAmount: 100,
       saved: 250,
+      accountId: 'a1',
+      reminderEnabled: true,
     },
     {
       id: 'g2',
@@ -75,6 +79,8 @@ function goalsWithReminder() {
       reminderDay: 5,
       reminderAmount: null,
       saved: 1200,
+      accountId: 'a2',
+      reminderEnabled: true,
     },
   ]
 }
@@ -88,17 +94,19 @@ beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(NOW)
   repo.findRules.mockResolvedValue(baseRules as never)
+  repo.findUsersWithNotifications.mockResolvedValue([{ id: 'u1', email: 'user@example.com' }] as never)
   repo.findGoalsWithReminder.mockResolvedValue(goalsWithReminder() as never)
   repo.createNotifications.mockImplementation(async (_userId, items) => items as never)
-  repo.findPendingEmailKeys.mockResolvedValue(new Set(['goal_reminder:g1:2026-11']) as never)
+  repo.findPendingEmailKeys.mockResolvedValue(new Set([`goal_contribution:g1:${PERIOD}`]) as never)
   repo.markEmailsSent.mockResolvedValue(undefined as never)
+  repo.ensureGoalContribution.mockResolvedValue(true as never)
 })
 
 afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('recordatorio mensual de metas · reglas', () => {
+describe('avisos de metas · reglas globales', () => {
   it('devuelve goalReminder en GET /rules', async () => {
     repo.findRules.mockResolvedValue([...baseRules, goalReminderRule(true, true)] as never)
 
@@ -138,7 +146,7 @@ describe('recordatorio mensual de metas · reglas', () => {
   })
 })
 
-describe('recordatorio mensual de metas · avisos', () => {
+describe('avisos de metas unificados', () => {
   const enabledRules = {
     subscriptionDue: { enabled: false, emailEnabled: false, daysBefore: 3 as const },
     spendingSummary: { enabled: false, emailEnabled: false, frequency: 'weekly' as const },
@@ -151,25 +159,23 @@ describe('recordatorio mensual de metas · avisos', () => {
     expect(repo.findGoalsWithReminder).toHaveBeenCalledWith('u1')
     expect(notifications).toHaveLength(1)
     expect(notifications[0]).toMatchObject({
-      key: 'goal_reminder:g1:2026-11',
-      type: 'goal_reminder',
+      key: `goal_contribution:g1:${PERIOD}`,
+      type: 'goal_contribution',
       title: 'Recordatorio de meta: Viaje a Japón',
-    })
-    expect(notifications[0].body).toContain('100,00')
-    expect(notifications[0].email).toMatchObject({
-      template: 'goal_reminder',
-      data: {
-        goalName: 'Viaje a Japón',
-        saved: 250,
-        target: 1000,
-        suggestedAmount: 100,
+      body: 'Tienes una aportación pendiente. Confírmala desde aquí.',
+      email: {
+        template: 'goal_contribution_accept',
+        data: { goalName: 'Viaje a Japón', period: PERIOD },
       },
     })
-    expect(String(notifications[0].email?.data.goalsUrl)).toMatch(/\/goals$/)
+    expect(notifications[0].body).not.toContain('100,00')
+    expect(notifications[0].email?.data).not.toHaveProperty('amount')
+    expect(String(notifications[0].email?.data.acceptUrl)).toMatch(/\/goals\/aceptar\?token=/)
     expect(String(notifications[0].email?.data.unsubscribeUrl)).toContain('/api/v1/unsubscribe?token=')
+    expect(notifications.some((item) => item.type === 'goal_reminder')).toBe(false)
   })
 
-  it('no genera avisos si la regla está desactivada', async () => {
+  it('no genera avisos si la regla global está desactivada', async () => {
     const notifications = await NotificationService.collectNotifications(
       'u1',
       { ...enabledRules, goalReminder: { enabled: false, emailEnabled: true } },
@@ -180,20 +186,16 @@ describe('recordatorio mensual de metas · avisos', () => {
     expect(repo.findGoalsWithReminder).not.toHaveBeenCalled()
   })
 
-  it('omite suggestedAmount cuando la meta no tiene importe sugerido', async () => {
-    repo.findGoalsWithReminder.mockResolvedValue([
-      { ...goalsWithReminder()[1], reminderDay: 18 },
-    ] as never)
-
+  it('el correo sigue sin importe aunque la meta tenga sugerencia', async () => {
     const notifications = await NotificationService.collectNotifications('u1', enabledRules, NOW)
 
-    expect(notifications).toHaveLength(1)
     expect(notifications[0].email?.data).not.toHaveProperty('suggestedAmount')
+    expect(notifications[0].email?.data).not.toHaveProperty('saved')
+    expect(notifications[0].email?.data).not.toHaveProperty('target')
   })
 
   it('envía el correo solo si goalReminder.emailEnabled', async () => {
     repo.findRules.mockResolvedValue([...baseRules, goalReminderRule(true, true)] as never)
-    repo.findUsersWithNotifications.mockResolvedValue([{ id: 'u1', email: 'user@example.com' }] as never)
     const sender = senderStub()
 
     const result = await NotificationService.processAll(sender)
@@ -203,15 +205,16 @@ describe('recordatorio mensual de metas · avisos', () => {
       expect.objectContaining({
         to: 'user@example.com',
         fromName: 'Finance Dashboard',
-        template: 'goal_reminder',
-        idempotencyKey: 'finance:goal_reminder:g1:2026-11',
+        template: 'goal_contribution_accept',
+        idempotencyKey: `finance:goal_contribution:g1:${PERIOD}`,
       })
     )
+    const payload = vi.mocked(sender.send).mock.calls[0][0]
+    expect(payload.data).not.toHaveProperty('amount')
   })
 
   it('crea el aviso in-app sin enviar correo si emailEnabled está a false', async () => {
     repo.findRules.mockResolvedValue([...baseRules, goalReminderRule(true, false)] as never)
-    repo.findUsersWithNotifications.mockResolvedValue([{ id: 'u1', email: 'user@example.com' }] as never)
     const sender = senderStub()
 
     const result = await NotificationService.processAll(sender)
@@ -220,9 +223,8 @@ describe('recordatorio mensual de metas · avisos', () => {
     expect(sender.send).not.toHaveBeenCalled()
   })
 
-  it('no reenvía el recordatorio mensual tras marcarlo como enviado', async () => {
+  it('no reenvía el aviso tras marcarlo como enviado', async () => {
     repo.findRules.mockResolvedValue([...baseRules, goalReminderRule(true, true)] as never)
-    repo.findUsersWithNotifications.mockResolvedValue([{ id: 'u1', email: 'user@example.com' }] as never)
     const first = senderStub()
     const second = senderStub()
 
@@ -231,7 +233,7 @@ describe('recordatorio mensual de metas · avisos', () => {
     await NotificationService.processAll(second)
 
     expect(first.send).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: 'finance:goal_reminder:g1:2026-11' })
+      expect.objectContaining({ idempotencyKey: `finance:goal_contribution:g1:${PERIOD}` })
     )
     expect(second.send).not.toHaveBeenCalled()
   })

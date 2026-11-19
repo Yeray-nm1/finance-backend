@@ -11,7 +11,7 @@ function queryList(value: unknown): string | undefined {
 
 export const TransactionController = {
   async getAll(req: Request, res: Response) {
-    const { page, limit, type, flow, categoryId, categoryIds, uncategorized, accountId, accountIds, dateFrom, dateTo, search, isSubscription, subscriptionIds, sortBy, sortOrder } = req.query
+    const { page, limit, type, flow, categoryId, categoryIds, uncategorized, accountId, accountIds, goalId, dateFrom, dateTo, search, isSubscription, subscriptionIds, sortBy, sortOrder } = req.query
     const result = await TransactionService.getAll(req.userId, {
       page: page ? parseInt(page as string) : undefined,
       limit: limit ? parseInt(limit as string) : undefined,
@@ -22,6 +22,7 @@ export const TransactionController = {
       uncategorized: uncategorized as string | undefined,
       accountId: accountId as string | undefined,
       accountIds: queryList(accountIds),
+      goalId: goalId as string | undefined,
       dateFrom: dateFrom as string | undefined,
       dateTo: dateTo as string | undefined,
       search: search as string | undefined,

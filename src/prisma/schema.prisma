@@ -88,10 +88,10 @@ model SavingsGoal {
   isArchived   Boolean   @default(false)
   /// Día del mes (1-28) en el que se envía el recordatorio mensual de la meta.
   reminderDay    Int?
-  /// Cuota sugerida para la aportación manual que propone el recordatorio; si la aportación está programada, es el importe real del cargo.
+  /// Importe sugerido para la aportación; se puede cambiar al confirmar y actualizarse desde la aceptación.
   reminderAmount Float?
-  /// Si la aportación mensual está programada y requiere aceptación por correo.
-  contributionScheduled Boolean @default(false)
+  /// Aviso mensual de esta meta; el switch global de preferencias sigue siendo el maestro.
+  reminderEnabled Boolean @default(false)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -103,15 +103,15 @@ model SavingsGoal {
   @@index([userId, isArchived])
 }
 
-/// Aportación mensual propuesta por correo. El importe y la cuenta destino se
-/// congelan al generarla para que coincidan con lo anunciado en el correo.
+/// Aportación mensual propuesta por correo. El correo no anuncia importe: la
+/// sugerencia se guarda al generarla y se sobrescribe al confirmar.
 model GoalContribution {
   id          String    @id @default(uuid())
   userId      String
   goalId      String
   /// Periodo UTC del cargo, en formato YYYY-MM.
   period      String
-  amount      Float
+  amount      Float?
   goalAccountId String
   status      String    @default("pending")
   sourceAccountId String?
