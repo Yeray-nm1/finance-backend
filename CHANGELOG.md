@@ -1,3 +1,8 @@
+## [1.11.0] - 2026-11-19
+
+- f165f54 Merge pull request #34 from Yeray-nm1/feature/ynm-unified-goal-reminders
+- 06cb80c feat: unifica los avisos mensuales de metas
+
 ## [1.10.2] - 2026-11-18
 
 - 28fb1ce Merge pull request #33 from Yeray-nm1/fix/ynm-goal-contribution-bell-link
