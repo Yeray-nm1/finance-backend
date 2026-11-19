@@ -54,36 +54,14 @@ function validateReminderAmount(value: unknown): number | null {
   return round2(value)
 }
 
-function validateContributionScheduled(value: unknown): boolean {
+function validateReminderEnabled(value: unknown): boolean {
   if (value === undefined || value === null) return false
 
   if (typeof value !== 'boolean') {
-    throw new BadRequestError('La aportación programada debe ser verdadero o falso')
+    throw new BadRequestError('El aviso de la meta debe ser verdadero o falso')
   }
 
   return value
-}
-
-function validateScheduledDay(value: unknown): number {
-  if (value === undefined || value === null) {
-    throw new BadRequestError('La aportación programada requiere un día entre 1 y 28')
-  }
-
-  return validateReminderDay(value)!
-}
-
-function validateScheduledAmount(value: unknown): number {
-  if (
-    value === undefined ||
-    value === null ||
-    typeof value !== 'number' ||
-    !Number.isFinite(value) ||
-    value <= 0
-  ) {
-    throw new BadRequestError('La aportación programada requiere un importe mayor que cero')
-  }
-
-  return validateReminderAmount(value)!
 }
 
 function parseTargetDate(value: unknown): Date | null {
@@ -165,7 +143,7 @@ function serializeGoal(
     updatedAt: Date
     reminderDay?: number | null
     reminderAmount?: number | null
-    contributionScheduled?: boolean
+    reminderEnabled?: boolean
   },
   saved: number,
   contributionsCount: number
@@ -189,7 +167,7 @@ function serializeGoal(
     updatedAt: goal.updatedAt,
     reminderDay: goal.reminderDay ?? null,
     reminderAmount: goal.reminderAmount == null ? null : round2(goal.reminderAmount),
-    contributionScheduled: goal.contributionScheduled ?? false,
+    reminderEnabled: goal.reminderEnabled ?? false,
     saved: totalSaved,
     progress,
     remaining,
@@ -257,22 +235,23 @@ export const GoalService = {
       accountId?: unknown
       reminderDay?: unknown
       reminderAmount?: unknown
-      contributionScheduled?: unknown
+      reminderEnabled?: unknown
     }
   ) {
     const accountId = await resolveSavingsAccount(userId, dto.accountId)
-    const contributionScheduled = validateContributionScheduled(dto.contributionScheduled)
+    const reminderEnabled = validateReminderEnabled(dto.reminderEnabled)
 
-    if (contributionScheduled && !accountId) {
-      throw new BadRequestError('La aportación programada requiere una cuenta de ahorro')
+    if (reminderEnabled && !accountId) {
+      throw new BadRequestError('El recordatorio de la meta requiere una cuenta de ahorro')
     }
 
-    const reminderDay = contributionScheduled
-      ? validateScheduledDay(dto.reminderDay)
-      : validateReminderDay(dto.reminderDay)
-    const reminderAmount = contributionScheduled
-      ? validateScheduledAmount(dto.reminderAmount)
-      : validateReminderAmount(dto.reminderAmount)
+    const reminderDay = validateReminderDay(dto.reminderDay)
+
+    if (reminderEnabled && reminderDay === null) {
+      throw new BadRequestError('El recordatorio de la meta requiere un día entre 1 y 28')
+    }
+
+    const reminderAmount = validateReminderAmount(dto.reminderAmount)
 
     const goal = await GoalRepository.create(userId, {
       name: normalizeName(dto.name),
@@ -281,7 +260,7 @@ export const GoalService = {
       accountId,
       reminderDay,
       reminderAmount,
-      contributionScheduled,
+      reminderEnabled,
     })
 
     return serializeGoal(goal, 0, 0)
@@ -298,7 +277,7 @@ export const GoalService = {
       isArchived?: unknown
       reminderDay?: unknown
       reminderAmount?: unknown
-      contributionScheduled?: unknown
+      reminderEnabled?: unknown
     }
   ) {
     const existing = await GoalRepository.findById(userId, id)
@@ -307,33 +286,27 @@ export const GoalService = {
       throw new NotFoundError('Goal')
     }
 
-    const contributionScheduled =
-      dto.contributionScheduled === undefined
-        ? (existing.contributionScheduled ?? false)
-        : validateContributionScheduled(dto.contributionScheduled)
+    const reminderEnabled =
+      dto.reminderEnabled === undefined
+        ? (existing.reminderEnabled ?? false)
+        : validateReminderEnabled(dto.reminderEnabled)
 
-    if (contributionScheduled) {
+    if (reminderEnabled) {
       const accountId = dto.accountId === undefined
         ? existing.accountId
         : await resolveSavingsAccount(userId, dto.accountId)
       if (!accountId) {
-        throw new BadRequestError('La aportación programada requiere una cuenta de ahorro')
+        throw new BadRequestError('El recordatorio de la meta requiere una cuenta de ahorro')
       }
 
       const reminderDay = dto.reminderDay === undefined
         ? existing.reminderDay
         : validateReminderDay(dto.reminderDay)
       if (reminderDay === undefined || reminderDay === null) {
-        throw new BadRequestError('La aportación programada requiere un día entre 1 y 28')
-      }
-
-      const reminderAmount = dto.reminderAmount === undefined
-        ? existing.reminderAmount
-        : validateReminderAmount(dto.reminderAmount)
-      if (reminderAmount === undefined || reminderAmount === null) {
-        throw new BadRequestError('La aportación programada requiere un importe mayor que cero')
+        throw new BadRequestError('El recordatorio de la meta requiere un día entre 1 y 28')
       }
     }
+    // El importe sugerido es opcional incluso con el aviso encendido.
 
     const data: Parameters<typeof GoalRepository.update>[2] = {}
 
@@ -348,8 +321,8 @@ export const GoalService = {
     if (dto.reminderAmount !== undefined) {
       data.reminderAmount = validateReminderAmount(dto.reminderAmount)
     }
-    if (dto.contributionScheduled !== undefined) {
-      data.contributionScheduled = contributionScheduled
+    if (dto.reminderEnabled !== undefined) {
+      data.reminderEnabled = reminderEnabled
     }
 
     const goal = await GoalRepository.update(userId, id, data)

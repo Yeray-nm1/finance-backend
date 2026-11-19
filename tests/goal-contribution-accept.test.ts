@@ -26,18 +26,21 @@ const accounts = vi.mocked(AccountService)
 const NOW = new Date('2026-11-18T12:00:00.000Z')
 const PERIOD = '2026-11'
 
-const pending = {
-  id: 'c1',
-  userId: 'u1',
-  goalId: 'g1',
-  period: PERIOD,
-  amount: 100,
-  goalAccountId: 'a1',
-  status: 'pending',
-  sourceAccountId: null,
-  acceptedAt: null,
-  createdAt: NOW,
-  goal: { name: 'Viaje a Japón', contributionScheduled: true },
+function pending(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'c1',
+    userId: 'u1',
+    goalId: 'g1',
+    period: PERIOD,
+    amount: 100,
+    goalAccountId: 'a1',
+    status: 'pending',
+    sourceAccountId: null,
+    acceptedAt: null,
+    createdAt: NOW,
+    goal: { name: 'Viaje a Japón', reminderEnabled: true },
+    ...overrides,
+  }
 }
 
 const candidateAccounts = [
@@ -47,13 +50,14 @@ const candidateAccounts = [
 
 beforeEach(() => {
   vi.clearAllMocks()
-  repo.findByPeriod.mockResolvedValue(pending as never)
+  repo.findByPeriod.mockResolvedValue(pending() as never)
   repo.acceptInTransaction.mockImplementation(async (input) => ({
     contribution: {
-      ...pending,
+      ...pending(),
       status: 'accepted',
       sourceAccountId: input.sourceAccountId,
       acceptedAt: NOW,
+      amount: input.amount,
     },
     transaction: {
       id: 't1',
@@ -92,100 +96,145 @@ describe('token de aceptación de aportación', () => {
   })
 })
 
-describe('aportación programada · consulta y aceptación', () => {
+describe('aviso de meta · consulta y aceptación', () => {
   const token = createGoalContributionToken('u1', 'g1', PERIOD)
 
-  it('CA-4.2 el GET devuelve importe, periodo, meta y cuentas sin la destino', async () => {
+  it('CA-WI3.1 el GET devuelve la sugerencia, periodo, meta, estado y cuentas sin la destino', async () => {
     const result = await GoalContributionService.getPending('u1', token)
 
     expect(result).toMatchObject({
       id: 'c1',
+      goalId: 'g1',
       amount: 100,
       period: PERIOD,
       goalName: 'Viaje a Japón',
+      status: 'pending',
       accounts: [expect.objectContaining({ id: 'checking' })],
     })
     expect(result.accounts.some((account) => account.id === 'a1')).toBe(false)
   })
 
+  it('CA-WI3.1 el GET devuelve amount null si la meta no tiene sugerencia', async () => {
+    repo.findByPeriod.mockResolvedValue(pending({ amount: null }) as never)
+
+    const result = await GoalContributionService.getPending('u1', token)
+
+    expect(result.amount).toBeNull()
+  })
+
   it('CA-4.3 un token de otro usuario no permite consultar ni aceptar', async () => {
     await expect(GoalContributionService.getPending('otro', token)).rejects.toThrow('Enlace de aportación no válido')
     await expect(
-      GoalContributionService.accept('otro', token, 'checking', NOW)
+      GoalContributionService.accept('otro', token, 'checking', { amount: 25 }, NOW)
     ).rejects.toThrow('Enlace de aportación no válido')
     expect(repo.acceptInTransaction).not.toHaveBeenCalled()
   })
 
-  it('CA-4.4 aceptar marca la fila y crea una transferencia y un aviso de confirmación', async () => {
-    const result = await GoalContributionService.accept('u1', token, 'checking', NOW)
+  it('CA-WI3.2 aceptar con importe editado crea la transferencia por ese importe', async () => {
+    const result = await GoalContributionService.accept(
+      'u1', token, 'checking', { amount: 125.5, updateSuggestion: false }, NOW
+    )
 
     expect(repo.acceptInTransaction).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'u1',
         goalId: 'g1',
         period: PERIOD,
-        amount: 100,
+        amount: 125.5,
         goalAccountId: 'a1',
         sourceAccountId: 'checking',
         date: NOW,
         description: 'Aportación a Viaje a Japón',
-        hash: createTransactionHash(NOW.toISOString(), -100, `goal_contribution:g1:${PERIOD}`),
-        notificationKey: `goal_contribution_accepted:g1:${PERIOD}`,
+        hash: createTransactionHash(NOW.toISOString(), -125.5, `goal_contribution:g1:${PERIOD}`),
+        updateSuggestion: false,
       })
     )
-    expect(result).toMatchObject({ status: 'accepted', sourceAccountId: 'checking' })
+    const sent = repo.acceptInTransaction.mock.calls[0][0]
+    expect(sent).not.toHaveProperty('notificationKey')
+    expect(sent).not.toHaveProperty('notificationTitle')
+    expect(sent).not.toHaveProperty('notificationBody')
+    expect(result).toMatchObject({
+      status: 'accepted',
+      amount: 125.5,
+      sourceAccountId: 'checking',
+      alreadyAccepted: false,
+    })
   })
 
-  it('CA-4.5 repetir la aceptación no crea otra transferencia', async () => {
-    repo.findByPeriod.mockResolvedValue({
-      ...pending,
+  it('CA-WI3.3 updateSuggestion se propaga a la transacción', async () => {
+    await GoalContributionService.accept('u1', token, 'checking', { amount: 25, updateSuggestion: true }, NOW)
+
+    expect(repo.acceptInTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 25, updateSuggestion: true })
+    )
+  })
+
+  it('CA-WI3.5 repetir la aceptación no crea otra transferencia', async () => {
+    repo.findByPeriod.mockResolvedValue(pending({
       status: 'accepted',
       sourceAccountId: 'checking',
       acceptedAt: NOW,
-    } as never)
+      amount: 25,
+    }) as never)
 
-    const result = await GoalContributionService.accept('u1', token, 'checking', NOW)
+    const result = await GoalContributionService.accept(
+      'u1', token, 'checking', { amount: 25 }, NOW
+    )
 
     expect(result).toMatchObject({ status: 'accepted', alreadyAccepted: true })
     expect(repo.acceptInTransaction).not.toHaveBeenCalled()
   })
 
   it.each([
+    ['cero', 0],
+    ['negativo', -5],
+    ['no finito', Number.NaN],
+    ['ausente', undefined],
+    ['texto', '100'],
+  ])('CA-WI3.4 rechaza el importe %s sin efectos', async (_case, amount) => {
+    await expect(
+      GoalContributionService.accept('u1', token, 'checking', { amount }, NOW)
+    ).rejects.toMatchObject({ statusCode: 400 })
+    expect(repo.acceptInTransaction).not.toHaveBeenCalled()
+  })
+
+  it.each([
     ['no propia', 'desconocida', 'La cuenta origen no es válida'],
     ['igual a la destino', 'a1', 'La cuenta origen debe ser distinta de la cuenta de la meta'],
-  ])('CA-4.6 rechaza cuenta %s sin efectos', async (_case, accountId, message) => {
+  ])('CA-WI3.4 rechaza cuenta %s sin efectos', async (_case, accountId, message) => {
     await expect(
-      GoalContributionService.accept('u1', token, accountId, NOW)
+      GoalContributionService.accept('u1', token, accountId, { amount: 25 }, NOW)
     ).rejects.toThrow(message)
     expect(repo.acceptInTransaction).not.toHaveBeenCalled()
   })
 
-  it('CA-4.6 rechaza un periodo ya cerrado', async () => {
+  it('CA-WI3.4 rechaza un periodo ya cerrado', async () => {
     const oldToken = createGoalContributionToken('u1', 'g1', '2026-10')
 
     await expect(
-      GoalContributionService.accept('u1', oldToken, 'checking', NOW)
+      GoalContributionService.accept('u1', oldToken, 'checking', { amount: 25 }, NOW)
     ).rejects.toThrow('El periodo de la aportación ya ha terminado')
     expect(repo.acceptInTransaction).not.toHaveBeenCalled()
   })
 
-  it('CA-4.6 rechaza la aceptación si se desactivó la programación', async () => {
-    repo.findByPeriod.mockResolvedValue({
-      ...pending,
-      goal: { name: 'Viaje a Japón', contributionScheduled: false },
-    } as never)
+  it('CA-WI3.6 apagar el toggle de la meta no invalida una aportación ya generada', async () => {
+    repo.findByPeriod.mockResolvedValue(pending({
+      goal: { name: 'Viaje a Japón', reminderEnabled: false },
+    }) as never)
 
-    await expect(
-      GoalContributionService.accept('u1', token, 'checking', NOW)
-    ).rejects.toThrow('La aportación ya no está programada')
-    expect(repo.acceptInTransaction).not.toHaveBeenCalled()
+    const result = await GoalContributionService.accept(
+      'u1', token, 'checking', { amount: 25 }, NOW
+    )
+
+    expect(result).toMatchObject({ status: 'accepted', alreadyAccepted: false })
+    expect(repo.acceptInTransaction).toHaveBeenCalled()
   })
 
-  it('CA-4.6 una aportación inexistente responde 409', async () => {
+  it('CA-WI3.4 una aportación inexistente responde 409', async () => {
     repo.findByPeriod.mockResolvedValue(null as never)
 
     await expect(
-      GoalContributionService.accept('u1', token, 'checking', NOW)
+      GoalContributionService.accept('u1', token, 'checking', { amount: 25 }, NOW)
     ).rejects.toMatchObject({ statusCode: 409 })
   })
 })

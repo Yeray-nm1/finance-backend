@@ -10,9 +10,11 @@ export interface AcceptContributionInput {
   date: Date
   description: string
   hash: string
-  notificationKey: string
-  notificationTitle: string
-  notificationBody: string
+  /** Solo se usa si se entrega una notificación legada; la aceptación ya no avisa en la campana. */
+  notificationKey?: string
+  notificationTitle?: string
+  notificationBody?: string
+  updateSuggestion: boolean
 }
 
 export const GoalContributionRepository = {
@@ -31,23 +33,31 @@ export const GoalContributionRepository = {
         acceptedAt: true,
         createdAt: true,
         goal: {
-          select: { name: true, contributionScheduled: true },
+          select: { name: true },
         },
       },
     })
   },
 
-  /** Estado, transferencia y aviso de confirmación se escriben en una sola transacción. */
+  /** Estado y transferencia se escriben en una sola transacción. */
   async acceptInTransaction(input: AcceptContributionInput) {
     return prisma.$transaction(async (tx) => {
       const contribution = await tx.goalContribution.update({
         where: { goalId_period: { goalId: input.goalId, period: input.period } },
         data: {
           status: 'accepted',
+          amount: input.amount,
           sourceAccountId: input.sourceAccountId,
           acceptedAt: input.date,
         },
       })
+
+      if (input.updateSuggestion) {
+        await tx.savingsGoal.update({
+          where: { id: input.goalId },
+          data: { reminderAmount: input.amount },
+        })
+      }
 
       const transaction = await tx.transaction.create({
         data: {
@@ -65,19 +75,21 @@ export const GoalContributionRepository = {
         include: { account: true, transferAccount: true },
       })
 
-      await tx.notification.upsert({
-        where: {
-          userId_key: { userId: input.userId, key: input.notificationKey },
-        },
-        create: {
-          userId: input.userId,
-          key: input.notificationKey,
-          type: 'goal_contribution',
-          title: input.notificationTitle,
-          body: input.notificationBody,
-        },
-        update: {},
-      })
+      if (input.notificationKey && input.notificationTitle && input.notificationBody) {
+        await tx.notification.upsert({
+          where: {
+            userId_key: { userId: input.userId, key: input.notificationKey },
+          },
+          create: {
+            userId: input.userId,
+            key: input.notificationKey,
+            type: 'goal_contribution',
+            title: input.notificationTitle,
+            body: input.notificationBody,
+          },
+          update: {},
+        })
+      }
 
       return { contribution, transaction }
     })

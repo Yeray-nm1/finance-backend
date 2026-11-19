@@ -10,7 +10,11 @@ export const GoalContributionController = {
   async accept(req: Request, res: Response) {
     const token = typeof req.body.token === 'string' ? req.body.token : ''
     const accountId = typeof req.body.accountId === 'string' ? req.body.accountId : ''
+    const { amount, updateSuggestion } = req.body
 
-    res.json(await GoalContributionService.accept(req.userId, token, accountId))
+    res.json(await GoalContributionService.accept(req.userId, token, accountId, {
+      amount,
+      updateSuggestion,
+    }))
   },
 }

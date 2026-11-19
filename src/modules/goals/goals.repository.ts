@@ -8,7 +8,7 @@ export type CreateGoalDTO = {
   accountId?: string | null
   reminderDay?: number | null
   reminderAmount?: number | null
-  contributionScheduled?: boolean
+  reminderEnabled?: boolean
 }
 
 export type UpdateGoalDTO = Partial<CreateGoalDTO> & {
@@ -98,7 +98,7 @@ export const GoalRepository = {
         accountId: dto.accountId ?? null,
         reminderDay: dto.reminderDay ?? null,
         reminderAmount: dto.reminderAmount ?? null,
-        contributionScheduled: dto.contributionScheduled ?? false,
+        reminderEnabled: dto.reminderEnabled ?? false,
       },
       include: goalListInclude,
     })
@@ -115,8 +115,8 @@ export const GoalRepository = {
         ...(dto.isArchived !== undefined ? { isArchived: dto.isArchived } : {}),
         ...(dto.reminderDay !== undefined ? { reminderDay: dto.reminderDay } : {}),
         ...(dto.reminderAmount !== undefined ? { reminderAmount: dto.reminderAmount } : {}),
-        ...(dto.contributionScheduled !== undefined
-          ? { contributionScheduled: dto.contributionScheduled }
+        ...(dto.reminderEnabled !== undefined
+          ? { reminderEnabled: dto.reminderEnabled }
           : {}),
       },
     })

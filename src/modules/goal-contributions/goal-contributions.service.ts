@@ -8,10 +8,26 @@ import {
 } from '../../utils/goal-contribution-token'
 import { GoalContributionRepository } from './goal-contributions.repository'
 
-const money = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
-
 function round2(value: number): number {
   return Math.round(value * 100) / 100
+}
+
+function validateAmount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new BadRequestError('El importe de la aportación debe ser un número mayor que cero')
+  }
+
+  return round2(value)
+}
+
+function validateUpdateSuggestion(value: unknown): boolean {
+  if (value === undefined || value === null) return false
+
+  if (typeof value !== 'boolean') {
+    throw new BadRequestError('La actualización del importe sugerido debe ser verdadero o falso')
+  }
+
+  return value
 }
 
 function requireToken(userId: string, token: string): GoalContributionTokenPayload {
@@ -41,7 +57,8 @@ export const GoalContributionService = {
 
     return {
       id: contribution.id,
-      amount: round2(contribution.amount),
+      goalId: contribution.goalId,
+      amount: contribution.amount == null ? null : round2(contribution.amount),
       period: contribution.period,
       goalName: contribution.goal.name,
       status: contribution.status,
@@ -52,7 +69,13 @@ export const GoalContributionService = {
     }
   },
 
-  async accept(userId: string, token: string, accountId: string, now: Date = new Date()) {
+  async accept(
+    userId: string,
+    token: string,
+    accountId: string,
+    dto: { amount: unknown; updateSuggestion?: unknown },
+    now: Date = new Date()
+  ) {
     const payload = requireToken(userId, token)
     const contribution = await GoalContributionRepository.findByPeriod(
       userId,
@@ -66,7 +89,7 @@ export const GoalContributionService = {
 
     const details = {
       id: contribution.id,
-      amount: round2(contribution.amount),
+      amount: contribution.amount == null ? null : round2(contribution.amount),
       period: contribution.period,
       goalName: contribution.goal.name,
       goalAccountId: contribution.goalAccountId,
@@ -82,9 +105,8 @@ export const GoalContributionService = {
       throw new ConflictError('El periodo de la aportación ya ha terminado')
     }
 
-    if (!contribution.goal.contributionScheduled) {
-      throw new ConflictError('La aportación ya no está programada')
-    }
+    const amount = validateAmount(dto.amount)
+    const updateSuggestion = validateUpdateSuggestion(dto.updateSuggestion)
 
     const accounts = await AccountService.getAll(userId)
     if (!accounts.some((account) => account.id === accountId)) {
@@ -97,12 +119,10 @@ export const GoalContributionService = {
     const description = `Aportación a ${contribution.goal.name}`
     const hash = createTransactionHash(
       now.toISOString(),
-      -Math.abs(contribution.amount),
+      -amount,
       `goal_contribution:${payload.goalId}:${payload.period}`
     )
-    const notificationKey = `goal_contribution_accepted:${payload.goalId}:${payload.period}`
-
-    logger.info('Aceptando aportación programada', {
+    logger.info('Aceptando aviso de meta', {
       userId,
       goalId: payload.goalId,
       period: payload.period,
@@ -113,19 +133,18 @@ export const GoalContributionService = {
       userId,
       goalId: payload.goalId,
       period: payload.period,
-      amount: contribution.amount,
+      amount,
       goalAccountId: contribution.goalAccountId,
       sourceAccountId: accountId,
       date: now,
       description,
       hash,
-      notificationKey,
-      notificationTitle: `Aportación confirmada: ${contribution.goal.name}`,
-      notificationBody: `Se ha registrado la aportación de ${money.format(round2(contribution.amount))} a la cuenta de ahorro de «${contribution.goal.name}».`,
+      updateSuggestion,
     })
 
     return {
       ...details,
+      amount,
       status: 'accepted',
       sourceAccountId: accountId,
       alreadyAccepted: false,

@@ -33,7 +33,7 @@ export type SaveNotificationRulesDTO = NotificationRules
 
 /** Datos que el backend entrega al micro para renderizar la plantilla de email. */
 export interface NotificationEmailPayload {
-  template: 'subscription_due' | 'spending_summary' | 'goal_reminder' | 'goal_contribution_accept'
+  template: 'subscription_due' | 'spending_summary' | 'goal_contribution_accept'
   data: Record<string, unknown>
 }
 

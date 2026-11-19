@@ -26,6 +26,7 @@ export type TransactionFilters = {
   uncategorized?: string
   accountId?: string
   accountIds?: string
+  goalId?: string
   dateFrom?: string
   dateTo?: string
   search?: string
@@ -93,6 +94,10 @@ export const TransactionRepository = {
       conditions.push({ accountId: { in: accountIds } })
     } else if (filters.accountId) {
       conditions.push({ accountId: filters.accountId })
+    }
+
+    if (filters.goalId) {
+      conditions.push({ goalId: filters.goalId })
     }
 
     if (conditions.length > 0) {
