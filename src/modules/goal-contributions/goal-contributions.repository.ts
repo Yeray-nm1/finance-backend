@@ -33,7 +33,16 @@ export const GoalContributionRepository = {
         acceptedAt: true,
         createdAt: true,
         goal: {
-          select: { name: true },
+          select: {
+            name: true,
+            reminderFrequency: true,
+            reminderWeekday: true,
+            reminderDay: true,
+            reminderLastDay: true,
+            reminderInterval: true,
+            reminderIntervalUnit: true,
+            reminderStartDate: true,
+          },
         },
       },
     })

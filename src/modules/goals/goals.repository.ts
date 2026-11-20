@@ -1,12 +1,25 @@
 import { prisma } from '../../core/db'
-import { Prisma } from '@prisma/client'
+import {
+  Prisma,
+  type GoalReminderChannel,
+  type GoalReminderFrequency,
+  type GoalReminderIntervalUnit,
+} from '@prisma/client'
+import { NotificationRepository } from '../notifications/notifications.repository'
 
 export type CreateGoalDTO = {
   name: string
   targetAmount: number
   targetDate?: Date | null
   accountId?: string | null
+  reminderFrequency?: GoalReminderFrequency
+  reminderChannel?: GoalReminderChannel
+  reminderWeekday?: number | null
   reminderDay?: number | null
+  reminderLastDay?: boolean
+  reminderInterval?: number | null
+  reminderIntervalUnit?: GoalReminderIntervalUnit | null
+  reminderStartDate?: Date | null
   reminderAmount?: number | null
   reminderEnabled?: boolean
 }
@@ -96,7 +109,14 @@ export const GoalRepository = {
         targetAmount: dto.targetAmount,
         targetDate: dto.targetDate ?? null,
         accountId: dto.accountId ?? null,
+        reminderFrequency: dto.reminderFrequency ?? 'MONTHLY',
+        reminderChannel: dto.reminderChannel ?? 'APP_AND_EMAIL',
+        reminderWeekday: dto.reminderWeekday ?? null,
         reminderDay: dto.reminderDay ?? null,
+        reminderLastDay: dto.reminderLastDay ?? false,
+        reminderInterval: dto.reminderInterval ?? null,
+        reminderIntervalUnit: dto.reminderIntervalUnit ?? null,
+        reminderStartDate: dto.reminderStartDate ?? null,
         reminderAmount: dto.reminderAmount ?? null,
         reminderEnabled: dto.reminderEnabled ?? false,
       },
@@ -113,7 +133,20 @@ export const GoalRepository = {
         ...(dto.targetDate !== undefined ? { targetDate: dto.targetDate } : {}),
         ...(dto.accountId !== undefined ? { accountId: dto.accountId } : {}),
         ...(dto.isArchived !== undefined ? { isArchived: dto.isArchived } : {}),
+        ...(dto.reminderFrequency !== undefined
+          ? { reminderFrequency: dto.reminderFrequency }
+          : {}),
+        ...(dto.reminderChannel !== undefined ? { reminderChannel: dto.reminderChannel } : {}),
+        ...(dto.reminderWeekday !== undefined ? { reminderWeekday: dto.reminderWeekday } : {}),
         ...(dto.reminderDay !== undefined ? { reminderDay: dto.reminderDay } : {}),
+        ...(dto.reminderLastDay !== undefined ? { reminderLastDay: dto.reminderLastDay } : {}),
+        ...(dto.reminderInterval !== undefined ? { reminderInterval: dto.reminderInterval } : {}),
+        ...(dto.reminderIntervalUnit !== undefined
+          ? { reminderIntervalUnit: dto.reminderIntervalUnit }
+          : {}),
+        ...(dto.reminderStartDate !== undefined
+          ? { reminderStartDate: dto.reminderStartDate }
+          : {}),
         ...(dto.reminderAmount !== undefined ? { reminderAmount: dto.reminderAmount } : {}),
         ...(dto.reminderEnabled !== undefined
           ? { reminderEnabled: dto.reminderEnabled }
@@ -128,6 +161,10 @@ export const GoalRepository = {
 
   async delete(userId: string, id: string) {
     return prisma.savingsGoal.deleteMany({ where: { id, userId } })
+  },
+
+  cancelPendingReminder(userId: string, goalId: string) {
+    return NotificationRepository.cancelPendingReminder(userId, goalId)
   },
 
   async createContribution(dto: CreateContributionDTO) {

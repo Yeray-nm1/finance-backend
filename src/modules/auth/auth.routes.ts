@@ -58,6 +58,7 @@ router.post('/login', loginLimiter, AuthController.login)
 router.post('/forgot-password', forgotPasswordLimiter, AuthController.forgotPassword)
 router.post('/reset-password', resetPasswordLimiter, AuthController.resetPassword)
 router.get('/me', authMiddleware, AuthController.me)
+router.put('/me', authMiddleware, AuthController.updateName)
 router.put('/password', authMiddleware, loginLimiter, AuthController.changePassword)
 router.post('/logout', AuthController.logout)
 

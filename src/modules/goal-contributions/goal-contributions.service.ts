@@ -2,6 +2,7 @@ import { BadRequestError, ConflictError } from '../../core/errors'
 import { logger } from '../../core/logger'
 import { AccountService } from '../accounts/accounts.service'
 import { createTransactionHash } from '../../utils/hash'
+import { currentPeriod } from '../../utils/goal-schedule'
 import {
   GoalContributionTokenPayload,
   verifyGoalContributionToken,
@@ -30,6 +31,16 @@ function validateUpdateSuggestion(value: unknown): boolean {
   return value
 }
 
+function assertCurrentPeriod(
+  goal: Parameters<typeof currentPeriod>[0],
+  period: string,
+  now: Date
+): void {
+  if (currentPeriod(goal, now) !== period) {
+    throw new ConflictError('El periodo de la aportación ya ha terminado')
+  }
+}
+
 function requireToken(userId: string, token: string): GoalContributionTokenPayload {
   const payload = verifyGoalContributionToken(token)
 
@@ -41,7 +52,7 @@ function requireToken(userId: string, token: string): GoalContributionTokenPaylo
 }
 
 export const GoalContributionService = {
-  async getPending(userId: string, token: string) {
+  async getPending(userId: string, token: string, now: Date = new Date()) {
     const payload = requireToken(userId, token)
     const contribution = await GoalContributionRepository.findByPeriod(
       userId,
@@ -52,6 +63,8 @@ export const GoalContributionService = {
     if (!contribution) {
       throw new ConflictError('La aportación ya no está disponible')
     }
+
+    assertCurrentPeriod(contribution.goal, contribution.period, now)
 
     const accounts = await AccountService.getAll(userId)
 
@@ -101,9 +114,7 @@ export const GoalContributionService = {
       return { ...details, alreadyAccepted: true }
     }
 
-    if (payload.period !== now.toISOString().slice(0, 7)) {
-      throw new ConflictError('El periodo de la aportación ya ha terminado')
-    }
+    assertCurrentPeriod(contribution.goal, payload.period, now)
 
     const amount = validateAmount(dto.amount)
     const updateSuggestion = validateUpdateSuggestion(dto.updateSuggestion)

@@ -5,6 +5,7 @@ import { UserRepository, RegisterDTO, LoginDTO } from './auth.repository'
 import { ConflictError, BadRequestError } from '../../core/errors'
 import { FINANCE_FROM_NAME, NotificationSender, notificationSender } from '../notifications/notification-sender'
 import { logger } from '../../core/logger'
+import { recipientNameFor } from '../../utils/goal-schedule'
 import {
   decodeResetToken,
   passwordFingerprint,
@@ -14,6 +15,31 @@ import {
 
 const SALT_ROUNDS = 10
 const DEFAULT_SESSION_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Nombre opcional del usuario; vacío se normaliza a null para usar el email. */
+function normalizeUserName(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') {
+    throw new BadRequestError('El nombre debe ser un texto')
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (trimmed.length > 50) {
+    throw new BadRequestError('El nombre no puede superar los 50 caracteres')
+  }
+
+  return trimmed
+}
+
+function serializeUser(user: { id: string; email: string; name?: string | null; createdAt: Date }) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name ?? null,
+    createdAt: user.createdAt,
+  }
+}
 
 function createSession(userId: string) {
   const token = jwt.sign({ userId }, config.jwtSecret, {
@@ -38,15 +64,11 @@ export const AuthService = {
 
     const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS)
 
-    const user = await UserRepository.create(dto.email, hashedPassword)
+    const user = await UserRepository.create(dto.email, hashedPassword, normalizeUserName(dto.name))
     const session = createSession(user.id)
 
     return {
-      user: {
-        id: user.id,
-        email: user.email,
-        createdAt: user.createdAt,
-      },
+      user: serializeUser(user),
       ...session,
     }
   },
@@ -67,11 +89,7 @@ export const AuthService = {
     const session = createSession(user.id)
 
     return {
-      user: {
-        id: user.id,
-        email: user.email,
-        createdAt: user.createdAt,
-      },
+      user: serializeUser(user),
       ...session,
     }
   },
@@ -111,7 +129,7 @@ export const AuthService = {
         to: user.email,
         fromName: FINANCE_FROM_NAME,
         template: 'password_reset',
-        data: { resetUrl },
+        data: { resetUrl, recipientName: recipientNameFor(user) },
         idempotencyKey: resetTokenIdempotencyKey(token),
       })
     } catch (error) {
@@ -144,10 +162,16 @@ export const AuthService = {
       throw new BadRequestError('User not found')
     }
 
-    return {
-      id: user.id,
-      email: user.email,
-      createdAt: user.createdAt,
+    return serializeUser(user)
+  },
+
+  async updateName(userId: string, name: unknown) {
+    const user = await UserRepository.findById(userId)
+
+    if (!user) {
+      throw new BadRequestError('User not found')
     }
+
+    return serializeUser(await UserRepository.updateName(userId, normalizeUserName(name)))
   },
 }

@@ -6,6 +6,7 @@ vi.mock('../src/modules/goals/goals.repository', () => ({
     findById: vi.fn(),
     update: vi.fn(),
     sumContributions: vi.fn(),
+    cancelPendingReminder: vi.fn(),
   },
 }))
 
@@ -86,16 +87,16 @@ describe('metas · recordatorio mensual', () => {
     expect(result).toMatchObject({ reminderDay: null, reminderAmount: null })
   })
 
-  it.each([0, 29, 1.5, -1])('rechaza el día %s', async (reminderDay) => {
+  it.each([0, 32, 1.5, -1])('rechaza el día %s', async (reminderDay) => {
     await expect(
       GoalService.create('u1', { ...baseInput, reminderDay })
-    ).rejects.toThrow('El día del recordatorio debe estar entre 1 y 28')
+    ).rejects.toThrow('El día del recordatorio debe estar entre 1 y 31')
   })
 
   it('rechaza un día que no sea entero escrito como texto', async () => {
     await expect(
       GoalService.create('u1', { ...baseInput, reminderDay: '18' })
-    ).rejects.toThrow('El día del recordatorio debe estar entre 1 y 28')
+    ).rejects.toThrow('El día del recordatorio debe estar entre 1 y 31')
   })
 
   it.each([0, -5, '100'])('rechaza el importe sugerido %s', async (reminderAmount) => {
@@ -125,7 +126,7 @@ describe('metas · recordatorio mensual', () => {
 
   it('rechaza un día inválido al editar', async () => {
     await expect(
-      GoalService.update('u1', 'g1', { reminderDay: 31 })
-    ).rejects.toThrow('El día del recordatorio debe estar entre 1 y 28')
+      GoalService.update('u1', 'g1', { reminderDay: 32 })
+    ).rejects.toThrow('El día del recordatorio debe estar entre 1 y 31')
   })
 })

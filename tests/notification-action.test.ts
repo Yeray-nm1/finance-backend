@@ -36,7 +36,7 @@ describe('acción de las notificaciones in-app', () => {
 
     await NotificationRepository.createNotifications('u1', [
       {
-        key: 'goal_contribution:g1:2026-11',
+        key: 'goal_contribution:g1:M:2026-11',
         type: 'goal_contribution',
         title: 'Aportación programada: Viaje a Japón',
         body: 'Pendiente de confirmar',
@@ -72,7 +72,7 @@ describe('acción de las notificaciones in-app', () => {
     db.findMany.mockResolvedValue([
       {
         id: 'n1',
-        key: 'goal_contribution:g1:2026-11',
+        key: 'goal_contribution:g1:M:2026-11',
         type: 'goal_contribution',
         title: 'Aportación programada: Viaje a Japón',
         body: 'Pendiente de confirmar',

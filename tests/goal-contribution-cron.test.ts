@@ -19,12 +19,13 @@ vi.mock('../src/modules/notifications/notifications.repository', () => ({
   },
 }))
 
+import { config } from '../src/config/env'
 import { NotificationRepository } from '../src/modules/notifications/notifications.repository'
 import { NotificationService } from '../src/modules/notifications/notifications.service'
 
 const repo = vi.mocked(NotificationRepository)
 const NOW = new Date('2026-11-18T12:00:00.000Z')
-const PERIOD = '2026-11'
+const PERIOD = 'M:2026-11'
 
 const rules = {
   subscriptionDue: { enabled: false, emailEnabled: false, daysBefore: 3 as const },
@@ -37,7 +38,14 @@ function scheduledGoal(overrides: Record<string, unknown> = {}) {
     id: 'g1',
     name: 'Viaje a Japón',
     targetAmount: 1000,
+    reminderFrequency: 'MONTHLY',
+    reminderChannel: 'APP_AND_EMAIL',
+    reminderWeekday: null,
     reminderDay: 18,
+    reminderLastDay: false,
+    reminderInterval: null,
+    reminderIntervalUnit: null,
+    reminderStartDate: null,
     reminderAmount: 100,
     saved: 250,
     accountId: 'a1',
@@ -75,7 +83,7 @@ afterEach(() => {
 
 describe('aviso mensual unificado · generación', () => {
   it('CA-WI2.2 genera un único aviso sin importe y con el correo de la plantilla nueva', async () => {
-    const notifications = await NotificationService.collectNotifications('u1', rules, NOW)
+    const notifications = await NotificationService.collectNotifications('u1', rules, NOW, 'user')
 
     expect(notifications).toHaveLength(1)
     expect(notifications[0]).toMatchObject({
@@ -87,9 +95,14 @@ describe('aviso mensual unificado · generación', () => {
     })
     expect(notifications[0].body).not.toContain('100,00')
     expect(notifications[0].email?.data).toMatchObject({
+      recipientName: 'user',
       goalName: 'Viaje a Japón',
-      period: PERIOD,
+      saved: 250,
+      targetAmount: 1000,
+      suggestedAmount: 100,
+      manageUrl: `${config.frontendUrl.replace(/\/$/, '')}/preferences`,
     })
+    expect(notifications[0].email?.data).not.toHaveProperty('period')
     expect(notifications[0].email?.data).not.toHaveProperty('amount')
     expect(notifications.some((item) => item.type === 'goal_reminder')).toBe(false)
     expect(String(notifications[0].email?.data.acceptUrl)).toMatch(/\/goals\/aceptar\?token=/)
@@ -99,7 +112,7 @@ describe('aviso mensual unificado · generación', () => {
   it('CA-WI2.4 con reminderAmount null se crea la aportación y se emite el aviso igual', async () => {
     repo.findGoalsWithReminder.mockResolvedValue([scheduledGoal({ reminderAmount: null })] as never)
 
-    const notifications = await NotificationService.collectNotifications('u1', rules, NOW)
+    const notifications = await NotificationService.collectNotifications('u1', rules, NOW, 'user')
     const sender = senderStub()
     await NotificationService.processAll(sender)
 
@@ -139,7 +152,7 @@ describe('aviso mensual unificado · generación', () => {
   })
 
   it('FIX-2 el aviso in-app abre la misma aceptación que el correo', async () => {
-    const notifications = await NotificationService.collectNotifications('u1', rules, NOW)
+    const notifications = await NotificationService.collectNotifications('u1', rules, NOW, 'user')
     const emailUrl = new URL(String(notifications[0].email?.data.acceptUrl))
 
     expect(notifications[0].actionUrl).toMatch(/^\/goals\/aceptar\?token=/)
@@ -195,7 +208,7 @@ describe('aviso mensual unificado · generación', () => {
     repo.findGoalsWithReminder.mockResolvedValue([scheduledGoal({ reminderEnabled: false })] as never)
     const sender = senderStub()
 
-    const notifications = await NotificationService.collectNotifications('u1', rules, NOW)
+    const notifications = await NotificationService.collectNotifications('u1', rules, NOW, 'user')
     const result = await NotificationService.processAll(sender)
 
     expect(notifications).toHaveLength(0)
@@ -209,7 +222,7 @@ describe('aviso mensual unificado · generación', () => {
     const globalOff = { ...rules, goalReminder: { enabled: false, emailEnabled: true } }
     const sender = senderStub()
 
-    const notifications = await NotificationService.collectNotifications('u1', globalOff, NOW)
+    const notifications = await NotificationService.collectNotifications('u1', globalOff, NOW, 'user')
     const result = await NotificationService.processAll(sender)
 
     expect(notifications).toHaveLength(0)
@@ -236,7 +249,7 @@ describe('aviso mensual unificado · generación', () => {
     repo.findGoalsWithReminder.mockResolvedValue([scheduledGoal(overrides)] as never)
     const sender = senderStub()
 
-    const notifications = await NotificationService.collectNotifications('u1', rules, NOW)
+    const notifications = await NotificationService.collectNotifications('u1', rules, NOW, 'user')
     const result = await NotificationService.processAll(sender)
 
     expect(notifications).toHaveLength(0)
@@ -256,9 +269,9 @@ describe('aviso mensual unificado · generación', () => {
   })
 
   it('CA-WI2.6 reintentar tras un fallo del micro conserva la misma URL de aceptación', async () => {
-    const first = await NotificationService.collectNotifications('u1', rules, NOW)
+    const first = await NotificationService.collectNotifications('u1', rules, NOW, 'user')
     repo.findPendingEmailKeys.mockResolvedValue(new Set([`goal_contribution:g1:${PERIOD}`]) as never)
-    const second = await NotificationService.collectNotifications('u1', rules, NOW)
+    const second = await NotificationService.collectNotifications('u1', rules, NOW, 'user')
 
     expect(String(second[0].email?.data.acceptUrl)).toBe(String(first[0].email?.data.acceptUrl))
   })

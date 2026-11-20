@@ -29,7 +29,7 @@ export const AuthController = {
 
     validatePassword(password)
 
-    const result = await AuthService.register({ email, password })
+    const result = await AuthService.register({ email, password, name: req.body.name })
 
     setSessionCookie(res, result.token, result.expiresAt)
 
@@ -80,6 +80,15 @@ export const AuthController = {
   async me(req: Request, res: Response) {
     const userId = req.userId
     const user = await AuthService.me(userId)
+    res.json({ user })
+  },
+
+  async updateName(req: Request, res: Response) {
+    if (!('name' in req.body)) {
+      throw new BadRequestError('El campo name es obligatorio')
+    }
+
+    const user = await AuthService.updateName(req.userId, req.body.name)
     res.json({ user })
   },
 

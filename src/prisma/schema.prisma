@@ -10,6 +10,8 @@ model User {
   id          String   @id @default(uuid())
   email       String   @unique
   password    String
+  /// Nombre opcional para personalizar los correos; si falta se usa la parte local del email.
+  name        String?
   createdAt   DateTime @default(now())
 
   accounts    Account[]
@@ -86,11 +88,23 @@ model SavingsGoal {
   targetDate   DateTime?
   accountId    String?
   isArchived   Boolean   @default(false)
-  /// Día del mes (1-28) en el que se envía el recordatorio mensual de la meta.
+  /// Frecuencia del aviso de la meta (default mensual para las metas preexistentes).
+  reminderFrequency GoalReminderFrequency @default(MONTHLY)
+  /// Canal elegido para esta meta; el switch global de preferencias sigue siendo el maestro.
+  reminderChannel GoalReminderChannel @default(APP_AND_EMAIL)
+  /// Día de la semana del aviso semanal (1 = lunes … 7 = domingo).
+  reminderWeekday Int?
+  /// Día del mes del aviso mensual (1-31).
   reminderDay    Int?
+  /// Usar el último día del mes en vez de reminderDay.
+  reminderLastDay Boolean @default(false)
+  /// Intervalo y unidad del aviso personalizado.
+  reminderInterval Int?
+  reminderIntervalUnit GoalReminderIntervalUnit?
+  reminderStartDate DateTime?
   /// Importe sugerido para la aportación; se puede cambiar al confirmar y actualizarse desde la aceptación.
   reminderAmount Float?
-  /// Aviso mensual de esta meta; el switch global de preferencias sigue siendo el maestro.
+  /// Aviso de esta meta; el switch global de preferencias sigue siendo el maestro.
   reminderEnabled Boolean @default(false)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -109,7 +123,7 @@ model GoalContribution {
   id          String    @id @default(uuid())
   userId      String
   goalId      String
-  /// Periodo UTC del cargo, en formato YYYY-MM.
+  /// Periodo UTC del aviso: W:YYYY-MM-DD, M:YYYY-MM o C:YYYY-MM-DD.
   period      String
   amount      Float?
   goalAccountId String
@@ -283,4 +297,21 @@ enum SubscriptionFrequency {
   bimonthly
   quarterly
   yearly
+}
+
+enum GoalReminderFrequency {
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum GoalReminderChannel {
+  APP_ONLY
+  APP_AND_EMAIL
+}
+
+enum GoalReminderIntervalUnit {
+  DAYS
+  WEEKS
+  MONTHS
 }

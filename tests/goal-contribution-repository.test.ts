@@ -21,7 +21,7 @@ import { GoalContributionRepository } from '../src/modules/goal-contributions/go
 const input = {
   userId: 'u1',
   goalId: 'g1',
-  period: '2026-11',
+  period: 'M:2026-11',
   amount: 125.5,
   goalAccountId: 'a1',
   sourceAccountId: 'checking',

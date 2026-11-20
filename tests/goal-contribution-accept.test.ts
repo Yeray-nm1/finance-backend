@@ -24,7 +24,7 @@ import { createGoalContributionToken, verifyGoalContributionToken } from '../src
 const repo = vi.mocked(GoalContributionRepository)
 const accounts = vi.mocked(AccountService)
 const NOW = new Date('2026-11-18T12:00:00.000Z')
-const PERIOD = '2026-11'
+const PERIOD = 'M:2026-11'
 
 function pending(overrides: Record<string, unknown> = {}) {
   return {
@@ -38,7 +38,17 @@ function pending(overrides: Record<string, unknown> = {}) {
     sourceAccountId: null,
     acceptedAt: null,
     createdAt: NOW,
-    goal: { name: 'Viaje a Japón', reminderEnabled: true },
+    goal: {
+      name: 'Viaje a Japón',
+      reminderEnabled: true,
+      reminderFrequency: 'MONTHLY',
+      reminderDay: 18,
+      reminderWeekday: null,
+      reminderLastDay: false,
+      reminderInterval: null,
+      reminderIntervalUnit: null,
+      reminderStartDate: null,
+    },
     ...overrides,
   }
 }
@@ -209,7 +219,7 @@ describe('aviso de meta · consulta y aceptación', () => {
   })
 
   it('CA-WI3.4 rechaza un periodo ya cerrado', async () => {
-    const oldToken = createGoalContributionToken('u1', 'g1', '2026-10')
+    const oldToken = createGoalContributionToken('u1', 'g1', 'M:2026-10')
 
     await expect(
       GoalContributionService.accept('u1', oldToken, 'checking', { amount: 25 }, NOW)
@@ -217,9 +227,72 @@ describe('aviso de meta · consulta y aceptación', () => {
     expect(repo.acceptInTransaction).not.toHaveBeenCalled()
   })
 
+  it('CA-16 el enlace sigue vigente hasta la siguiente ocurrencia', async () => {
+    await expect(
+      GoalContributionService.accept(
+        'u1',
+        token,
+        'checking',
+        { amount: 25 },
+        new Date('2026-11-30T12:00:00.000Z')
+      )
+    ).resolves.toMatchObject({ status: 'accepted' })
+
+    await expect(
+      GoalContributionService.getPending('u1', token)
+    ).resolves.toMatchObject({ period: PERIOD })
+  })
+
+  it('CA-16 getPending rechaza un periodo que ya no es el vigente', async () => {
+    const oldToken = createGoalContributionToken('u1', 'g1', 'M:2026-10')
+    repo.findByPeriod.mockResolvedValue(pending({ period: 'M:2026-10' }) as never)
+
+    await expect(GoalContributionService.getPending('u1', oldToken)).rejects.toThrow(
+      'El periodo de la aportación ya ha terminado'
+    )
+  })
+
+  it('CA-16 el periodo semanal caduca al cambiar de semana', async () => {
+    const weeklyToken = createGoalContributionToken('u1', 'g1', 'W:2026-11-13')
+    repo.findByPeriod.mockResolvedValue(pending({
+      period: 'W:2026-11-13',
+      goal: {
+        name: 'Viaje a Japón',
+        reminderEnabled: true,
+        reminderFrequency: 'WEEKLY',
+        reminderDay: null,
+        reminderWeekday: 5,
+        reminderLastDay: false,
+        reminderInterval: null,
+        reminderIntervalUnit: null,
+        reminderStartDate: null,
+      },
+    }) as never)
+
+    await expect(
+      GoalContributionService.accept(
+        'u1',
+        weeklyToken,
+        'checking',
+        { amount: 25 },
+        new Date('2026-11-21T12:00:00.000Z')
+      )
+    ).rejects.toThrow('El periodo de la aportación ya ha terminado')
+  })
+
   it('CA-WI3.6 apagar el toggle de la meta no invalida una aportación ya generada', async () => {
     repo.findByPeriod.mockResolvedValue(pending({
-      goal: { name: 'Viaje a Japón', reminderEnabled: false },
+      goal: {
+        name: 'Viaje a Japón',
+        reminderEnabled: false,
+        reminderFrequency: 'MONTHLY',
+        reminderDay: 18,
+        reminderWeekday: null,
+        reminderLastDay: false,
+        reminderInterval: null,
+        reminderIntervalUnit: null,
+        reminderStartDate: null,
+      },
     }) as never)
 
     const result = await GoalContributionService.accept(

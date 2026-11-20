@@ -8,6 +8,7 @@ vi.mock('../src/modules/goals/goals.repository', () => ({
     findById: vi.fn(),
     update: vi.fn(),
     sumContributions: vi.fn(),
+    cancelPendingReminder: vi.fn(),
   },
 }))
 
@@ -114,7 +115,7 @@ describe('WI-1/WI-5 · toggle de recordatorio por meta', () => {
   it('rechaza encender el recordatorio sin día', async () => {
     await expect(
       GoalService.create('u1', { ...baseInput, reminderEnabled: true })
-    ).rejects.toThrow('El recordatorio de la meta requiere un día entre 1 y 28')
+    ).rejects.toThrow('El aviso mensual requiere un día o el último día del mes')
 
     expect(repo.create).not.toHaveBeenCalled()
   })
@@ -140,10 +141,10 @@ describe('WI-1/WI-5 · toggle de recordatorio por meta', () => {
     }))
   })
 
-  it.each([0, 29, 1.5, -1])('rechaza el día %s aunque el toggle esté apagado', async (reminderDay) => {
+  it.each([0, 32, 1.5, -1])('rechaza el día %s aunque el toggle esté apagado', async (reminderDay) => {
     await expect(
       GoalService.create('u1', { ...baseInput, reminderDay })
-    ).rejects.toThrow('El día del recordatorio debe estar entre 1 y 28')
+    ).rejects.toThrow('El día del recordatorio debe estar entre 1 y 31')
   })
 
   it.each([0, -5, '100'])('rechaza el importe sugerido %s', async (reminderAmount) => {

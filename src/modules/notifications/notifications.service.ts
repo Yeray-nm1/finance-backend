@@ -5,6 +5,11 @@ import { logger } from '../../core/logger'
 import { nextChargeDate } from '../../utils/subscription-dates'
 import { createGoalContributionPath } from '../../utils/goal-contribution-token'
 import { createUnsubscribeUrl } from '../../utils/unsubscribe'
+import {
+  currentPeriod,
+  isOccurrence,
+  recipientNameFor,
+} from '../../utils/goal-schedule'
 import { NotificationRepository, NewNotification } from './notifications.repository'
 import { FINANCE_FROM_NAME, notificationSender, NotificationSender } from './notification-sender'
 import {
@@ -88,18 +93,28 @@ interface GoalForReminder {
   id: string
   name: string
   targetAmount: number
-  reminderDay: number | null
+  reminderFrequency?: string | null
+  reminderChannel?: string | null
+  reminderWeekday?: number | null
+  reminderDay?: number | null
+  reminderLastDay?: boolean | null
+  reminderInterval?: number | null
+  reminderIntervalUnit?: string | null
+  reminderStartDate?: Date | null
   reminderAmount: number | null
   saved: number
   accountId?: string | null
   reminderEnabled?: boolean
 }
 
-/** Aportación que debe proponerse este mes, o null si la meta no es elegible. */
+/** Aportación que debe proponerse en esta ocurrencia, o null si no es elegible. */
 function reminderContributionFor(goal: GoalForReminder, now: Date) {
   if (!goal.reminderEnabled) return null
-  if (goal.reminderDay !== now.getUTCDate()) return null
   if (!goal.accountId) return null
+  if (!isOccurrence(goal, now)) return null
+
+  const period = currentPeriod(goal, now)
+  if (!period) return null
 
   const saved = round2(goal.saved)
   if (saved >= round2(goal.targetAmount)) return null
@@ -107,7 +122,14 @@ function reminderContributionFor(goal: GoalForReminder, now: Date) {
   const amount = goal.reminderAmount == null ? null : round2(goal.reminderAmount)
   if (amount !== null && amount <= 0) return null
 
-  return { period: now.toISOString().slice(0, 7), amount, goalAccountId: goal.accountId }
+  return { period, amount, goalAccountId: goal.accountId }
+}
+
+/** Solo las metas con canal app+email pueden adjuntar correo; la campana siempre se crea. */
+function emailForGoal(goal: GoalForReminder) {
+  return goal.reminderChannel === undefined || goal.reminderChannel === null
+    ? true
+    : goal.reminderChannel === 'APP_AND_EMAIL'
 }
 
 export const NotificationService = {
@@ -173,7 +195,8 @@ export const NotificationService = {
   async collectNotifications(
     userId: string,
     rules: NotificationRules,
-    now: Date
+    now: Date,
+    recipientName = ''
   ): Promise<NewNotification[]> {
     const notifications: NewNotification[] = []
 
@@ -203,6 +226,7 @@ export const NotificationService = {
           email: {
             template: 'subscription_due',
             data: {
+              recipientName,
               description: subscription.name,
               amount: subscription.amount,
               chargeDate: dateLabel,
@@ -225,6 +249,7 @@ export const NotificationService = {
           email: {
             template: 'spending_summary',
             data: {
+              recipientName,
               period: label,
               total: spending.total,
               unsubscribeUrl: createUnsubscribeUrl(userId),
@@ -248,15 +273,24 @@ export const NotificationService = {
           title: `Recordatorio de meta: ${goal.name}`,
           body: 'Tienes una aportación pendiente. Confírmala desde aquí.',
           actionUrl: acceptPath,
-          email: {
-            template: 'goal_contribution_accept',
-            data: {
-              goalName: goal.name,
-              period: reminder.period,
-              acceptUrl: `${config.frontendUrl.replace(/\/$/, '')}${acceptPath}`,
-              unsubscribeUrl: createUnsubscribeUrl(userId),
-            },
-          },
+          ...(emailForGoal(goal)
+            ? {
+                email: {
+                  template: 'goal_contribution_accept' as const,
+                  data: {
+                    recipientName,
+                    goalName: goal.name,
+                    saved: round2(goal.saved),
+                    targetAmount: round2(goal.targetAmount),
+                    suggestedAmount: reminder.amount,
+                    acceptUrl: `${config.frontendUrl.replace(/\/$/, '')}${acceptPath}`,
+                    // El micro valida la URL con z.string().url(): nunca relativa.
+                    manageUrl: `${config.frontendUrl.replace(/\/$/, '')}/preferences`,
+                    unsubscribeUrl: createUnsubscribeUrl(userId),
+                  },
+                },
+              }
+            : {}),
         })
       }
     }
@@ -272,7 +306,7 @@ export const NotificationService = {
 
     for (const goal of goals) {
       const reminder = reminderContributionFor(goal, now)
-      const key = `goal_contribution:${goal.id}:${now.toISOString().slice(0, 7)}`
+      const key = `goal_contribution:${goal.id}:${reminder?.period ?? currentPeriod(goal, now) ?? 'unknown'}`
 
       if (!reminder) {
         skipped += 1
@@ -353,7 +387,12 @@ export const NotificationService = {
         result.contributionsSkipped += contributions.skipped
       }
 
-      const notifications = await NotificationService.collectNotifications(user.id, rules, now)
+      const notifications = await NotificationService.collectNotifications(
+        user.id,
+        rules,
+        now,
+        recipientNameFor(user)
+      )
       const created = await NotificationRepository.createNotifications(user.id, notifications)
       result.processed += created.length
 

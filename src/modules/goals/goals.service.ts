@@ -37,11 +37,229 @@ function validateTargetAmount(value: unknown): number {
 function validateReminderDay(value: unknown): number | null {
   if (value === null || value === undefined) return null
 
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 28) {
-    throw new BadRequestError('El día del recordatorio debe estar entre 1 y 28')
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 31) {
+    throw new BadRequestError('El día del recordatorio debe estar entre 1 y 31')
   }
 
   return value
+}
+
+type GoalReminderFrequency = 'WEEKLY' | 'MONTHLY' | 'CUSTOM'
+type GoalReminderChannel = 'APP_ONLY' | 'APP_AND_EMAIL'
+type GoalReminderIntervalUnit = 'DAYS' | 'WEEKS' | 'MONTHS'
+
+const FREQUENCIES: GoalReminderFrequency[] = ['WEEKLY', 'MONTHLY', 'CUSTOM']
+const CHANNELS: GoalReminderChannel[] = ['APP_ONLY', 'APP_AND_EMAIL']
+const INTERVAL_UNITS: GoalReminderIntervalUnit[] = ['DAYS', 'WEEKS', 'MONTHS']
+
+export interface ReminderSettings {
+  reminderFrequency: GoalReminderFrequency
+  reminderChannel: GoalReminderChannel
+  reminderWeekday: number | null
+  reminderDay: number | null
+  reminderLastDay: boolean
+  reminderInterval: number | null
+  reminderIntervalUnit: GoalReminderIntervalUnit | null
+  reminderStartDate: Date | null
+}
+
+type ReminderInput = {
+  reminderFrequency?: unknown
+  reminderChannel?: unknown
+  reminderWeekday?: unknown
+  reminderDay?: unknown
+  reminderLastDay?: unknown
+  reminderInterval?: unknown
+  reminderIntervalUnit?: unknown
+  reminderStartDate?: unknown
+}
+
+function pickEnum<T extends string>(value: unknown, allowed: T[], label: string): T {
+  if (typeof value !== 'string' || !allowed.includes(value as T)) {
+    throw new BadRequestError(`${label} no es válido`)
+  }
+  return value as T
+}
+
+function validateWeekday(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 7) {
+    throw new BadRequestError('El día de la semana debe estar entre 1 (lunes) y 7 (domingo)')
+  }
+  return value
+}
+
+function validateLastDay(value: unknown): boolean {
+  if (value === undefined || value === null) return false
+  if (typeof value !== 'boolean') {
+    throw new BadRequestError('«Usar el último día del mes» debe ser verdadero o falso')
+  }
+  return value
+}
+
+function validateInterval(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw new BadRequestError('El intervalo debe ser un número entero mayor o igual que 1')
+  }
+  return value
+}
+
+function parseStartDate(value: unknown): Date {
+  if (typeof value !== 'string' || !value) {
+    throw new BadRequestError('La fecha de inicio del aviso no es válida')
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestError('La fecha de inicio del aviso no es válida')
+  }
+  return date
+}
+
+/** Normaliza la programación y deja a null los campos que no usa la frecuencia elegida. */
+function resolveReminderSettings(
+  input: ReminderInput,
+  reminderEnabled: boolean,
+  existing?: ReminderSettings
+): ReminderSettings {
+  const frequency =
+    input.reminderFrequency === undefined
+      ? (existing?.reminderFrequency ?? 'MONTHLY')
+      : pickEnum(input.reminderFrequency, FREQUENCIES, 'La frecuencia del aviso')
+  const channel =
+    input.reminderChannel === undefined
+      ? (existing?.reminderChannel ?? 'APP_AND_EMAIL')
+      : pickEnum(input.reminderChannel, CHANNELS, 'El canal del aviso')
+  const lastDay =
+    input.reminderLastDay === undefined
+      ? (existing?.reminderLastDay ?? false)
+      : validateLastDay(input.reminderLastDay)
+
+  const settings: ReminderSettings = {
+    reminderFrequency: frequency,
+    reminderChannel: channel,
+    reminderWeekday:
+      input.reminderWeekday === undefined
+        ? (existing?.reminderWeekday ?? null)
+        : input.reminderWeekday === null
+          ? null
+          : validateWeekday(input.reminderWeekday),
+    reminderDay:
+      input.reminderDay === undefined
+        ? (existing?.reminderDay ?? null)
+        : validateReminderDay(input.reminderDay),
+    reminderLastDay: lastDay,
+    reminderInterval:
+      input.reminderInterval === undefined
+        ? (existing?.reminderInterval ?? null)
+        : input.reminderInterval === null
+          ? null
+          : validateInterval(input.reminderInterval),
+    reminderIntervalUnit:
+      input.reminderIntervalUnit === undefined
+        ? (existing?.reminderIntervalUnit ?? null)
+        : input.reminderIntervalUnit === null
+          ? null
+          : pickEnum(input.reminderIntervalUnit, INTERVAL_UNITS, 'La unidad del intervalo'),
+    reminderStartDate:
+      input.reminderStartDate === undefined
+        ? (existing?.reminderStartDate ?? null)
+        : input.reminderStartDate === null
+          ? null
+          : parseStartDate(input.reminderStartDate),
+  }
+
+  // El toggle es maestro: con el aviso apagado se permite guardar una
+  // programación incompleta (o borrarla) sin bloquear el resto de la meta.
+  if (!reminderEnabled) return settings
+
+  if (frequency === 'WEEKLY') {
+    if (settings.reminderWeekday === null) {
+      throw new BadRequestError('El aviso semanal requiere un día de la semana')
+    }
+    return {
+      ...settings,
+      reminderDay: null,
+      reminderLastDay: false,
+      reminderInterval: null,
+      reminderIntervalUnit: null,
+      reminderStartDate: null,
+    }
+  }
+
+  if (frequency === 'MONTHLY') {
+    if (!lastDay && settings.reminderDay === null) {
+      throw new BadRequestError('El aviso mensual requiere un día o el último día del mes')
+    }
+    return {
+      ...settings,
+      reminderWeekday: null,
+      reminderDay: lastDay ? null : settings.reminderDay,
+      reminderInterval: null,
+      reminderIntervalUnit: null,
+      reminderStartDate: null,
+    }
+  }
+
+  if (
+    settings.reminderInterval === null ||
+    settings.reminderIntervalUnit === null ||
+    settings.reminderStartDate === null
+  ) {
+    throw new BadRequestError('El aviso personalizado requiere intervalo, unidad y fecha de inicio')
+  }
+
+  return {
+    ...settings,
+    reminderWeekday: null,
+    reminderDay: null,
+    reminderLastDay: false,
+  }
+}
+
+const SCHEDULE_KEYS: (keyof ReminderInput)[] = [
+  'reminderFrequency',
+  'reminderChannel',
+  'reminderWeekday',
+  'reminderDay',
+  'reminderLastDay',
+  'reminderInterval',
+  'reminderIntervalUnit',
+  'reminderStartDate',
+]
+
+function hasScheduleChanges(dto: ReminderInput): boolean {
+  return SCHEDULE_KEYS.some((key) => dto[key] !== undefined)
+}
+
+function settingsFromGoal(goal: {
+  reminderFrequency?: string | null
+  reminderChannel?: string | null
+  reminderWeekday?: number | null
+  reminderDay?: number | null
+  reminderLastDay?: boolean | null
+  reminderInterval?: number | null
+  reminderIntervalUnit?: string | null
+  reminderStartDate?: Date | null
+}): ReminderSettings {
+  return {
+    reminderFrequency: pickEnum(
+      goal.reminderFrequency ?? 'MONTHLY',
+      FREQUENCIES,
+      'La frecuencia del aviso'
+    ),
+    reminderChannel: pickEnum(
+      goal.reminderChannel ?? 'APP_AND_EMAIL',
+      CHANNELS,
+      'El canal del aviso'
+    ),
+    reminderWeekday: goal.reminderWeekday ?? null,
+    reminderDay: goal.reminderDay ?? null,
+    reminderLastDay: goal.reminderLastDay ?? false,
+    reminderInterval: goal.reminderInterval ?? null,
+    reminderIntervalUnit: goal.reminderIntervalUnit
+      ? pickEnum(goal.reminderIntervalUnit, INTERVAL_UNITS, 'La unidad del intervalo')
+      : null,
+    reminderStartDate: goal.reminderStartDate ?? null,
+  }
 }
 
 function validateReminderAmount(value: unknown): number | null {
@@ -141,7 +359,14 @@ function serializeGoal(
     isArchived: boolean
     createdAt: Date
     updatedAt: Date
+    reminderFrequency?: string | null
+    reminderChannel?: string | null
+    reminderWeekday?: number | null
     reminderDay?: number | null
+    reminderLastDay?: boolean | null
+    reminderInterval?: number | null
+    reminderIntervalUnit?: string | null
+    reminderStartDate?: Date | null
     reminderAmount?: number | null
     reminderEnabled?: boolean
   },
@@ -165,7 +390,14 @@ function serializeGoal(
     isArchived: goal.isArchived,
     createdAt: goal.createdAt,
     updatedAt: goal.updatedAt,
+    reminderFrequency: goal.reminderFrequency ?? 'MONTHLY',
+    reminderChannel: goal.reminderChannel ?? 'APP_AND_EMAIL',
+    reminderWeekday: goal.reminderWeekday ?? null,
     reminderDay: goal.reminderDay ?? null,
+    reminderLastDay: goal.reminderLastDay ?? false,
+    reminderInterval: goal.reminderInterval ?? null,
+    reminderIntervalUnit: goal.reminderIntervalUnit ?? null,
+    reminderStartDate: goal.reminderStartDate?.toISOString() ?? null,
     reminderAmount: goal.reminderAmount == null ? null : round2(goal.reminderAmount),
     reminderEnabled: goal.reminderEnabled ?? false,
     saved: totalSaved,
@@ -233,10 +465,9 @@ export const GoalService = {
       targetAmount: unknown
       targetDate?: unknown
       accountId?: unknown
-      reminderDay?: unknown
       reminderAmount?: unknown
       reminderEnabled?: unknown
-    }
+    } & ReminderInput
   ) {
     const accountId = await resolveSavingsAccount(userId, dto.accountId)
     const reminderEnabled = validateReminderEnabled(dto.reminderEnabled)
@@ -245,20 +476,15 @@ export const GoalService = {
       throw new BadRequestError('El recordatorio de la meta requiere una cuenta de ahorro')
     }
 
-    const reminderDay = validateReminderDay(dto.reminderDay)
-
-    if (reminderEnabled && reminderDay === null) {
-      throw new BadRequestError('El recordatorio de la meta requiere un día entre 1 y 28')
-    }
-
     const reminderAmount = validateReminderAmount(dto.reminderAmount)
+    const settings = resolveReminderSettings(dto, reminderEnabled)
 
     const goal = await GoalRepository.create(userId, {
       name: normalizeName(dto.name),
       targetAmount: validateTargetAmount(dto.targetAmount),
       targetDate: parseTargetDate(dto.targetDate),
       accountId,
-      reminderDay,
+      ...settings,
       reminderAmount,
       reminderEnabled,
     })
@@ -275,10 +501,9 @@ export const GoalService = {
       targetDate?: unknown
       accountId?: unknown
       isArchived?: unknown
-      reminderDay?: unknown
       reminderAmount?: unknown
       reminderEnabled?: unknown
-    }
+    } & ReminderInput
   ) {
     const existing = await GoalRepository.findById(userId, id)
 
@@ -298,13 +523,6 @@ export const GoalService = {
       if (!accountId) {
         throw new BadRequestError('El recordatorio de la meta requiere una cuenta de ahorro')
       }
-
-      const reminderDay = dto.reminderDay === undefined
-        ? existing.reminderDay
-        : validateReminderDay(dto.reminderDay)
-      if (reminderDay === undefined || reminderDay === null) {
-        throw new BadRequestError('El recordatorio de la meta requiere un día entre 1 y 28')
-      }
     }
     // El importe sugerido es opcional incluso con el aviso encendido.
 
@@ -317,7 +535,9 @@ export const GoalService = {
       data.accountId = await resolveSavingsAccount(userId, dto.accountId)
     }
     if (dto.isArchived !== undefined) data.isArchived = dto.isArchived === true
-    if (dto.reminderDay !== undefined) data.reminderDay = validateReminderDay(dto.reminderDay)
+    if (hasScheduleChanges(dto)) {
+      Object.assign(data, resolveReminderSettings(dto, reminderEnabled, settingsFromGoal(existing)))
+    }
     if (dto.reminderAmount !== undefined) {
       data.reminderAmount = validateReminderAmount(dto.reminderAmount)
     }
@@ -329,6 +549,10 @@ export const GoalService = {
 
     if (!goal) {
       throw new NotFoundError('Goal')
+    }
+
+    if (hasScheduleChanges(dto) || (existing.reminderEnabled && !reminderEnabled)) {
+      await GoalRepository.cancelPendingReminder(userId, id)
     }
 
     return serializeGoalDetail(goal)

@@ -53,7 +53,9 @@ describe('recuperación de contraseña', () => {
         to: 'user@example.com',
         fromName: 'Finance Dashboard',
         template: 'password_reset',
-        data: { resetUrl: expect.stringContaining('/reset-password?token=') },
+        data: expect.objectContaining({
+          resetUrl: expect.stringContaining('/reset-password?token='),
+        }),
         idempotencyKey: expect.stringMatching(/^finance:password_reset:/),
       })
     )

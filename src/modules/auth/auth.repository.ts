@@ -3,6 +3,7 @@ import { prisma } from '../../core/db'
 export type RegisterDTO = {
   email: string
   password: string
+  name?: string | null
 }
 
 export type LoginDTO = {
@@ -15,12 +16,13 @@ export const UserRepository = {
     return prisma.user.findUnique({ where: { email } })
   },
 
-  async create(email: string, hashedPassword: string) {
+  async create(email: string, hashedPassword: string, name: string | null = null) {
     return prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           email,
           password: hashedPassword,
+          name,
           accounts: {
             create: {
               name: 'Cuenta principal',
@@ -53,6 +55,13 @@ export const UserRepository = {
     return prisma.user.update({
       where: { id },
       data: { password: hashedPassword },
+    })
+  },
+
+  async updateName(id: string, name: string | null) {
+    return prisma.user.update({
+      where: { id },
+      data: { name },
     })
   },
 }

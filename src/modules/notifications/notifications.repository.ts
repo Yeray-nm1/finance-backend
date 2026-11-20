@@ -30,7 +30,7 @@ function actionUrlForRow(row: {
   if (row.actionUrl) return row.actionUrl
   if (row.type !== 'goal_contribution') return null
 
-  const match = /^goal_contribution:([^:]+):(\d{4}-\d{2})$/.exec(row.key)
+  const match = /^goal_contribution:([^:]+):([WMPC]:\d{4}-\d{2}(?:-\d{2})?)$/.exec(row.key)
   return match ? createGoalContributionPath(row.userId, match[1], match[2]) : null
 }
 
@@ -108,7 +108,7 @@ export const NotificationRepository = {
   findUsersWithNotifications() {
     return prisma.user.findMany({
       where: { notificationRules: { some: { enabled: true } } },
-      select: { id: true, email: true },
+      select: { id: true, email: true, name: true },
     })
   },
 
@@ -200,13 +200,19 @@ export const NotificationRepository = {
         userId,
         isArchived: false,
         reminderEnabled: true,
-        reminderDay: { not: null },
       },
       select: {
         id: true,
         name: true,
         targetAmount: true,
+        reminderFrequency: true,
+        reminderChannel: true,
+        reminderWeekday: true,
         reminderDay: true,
+        reminderLastDay: true,
+        reminderInterval: true,
+        reminderIntervalUnit: true,
+        reminderStartDate: true,
         reminderAmount: true,
         accountId: true,
         reminderEnabled: true,
@@ -257,5 +263,29 @@ export const NotificationRepository = {
       }
       throw error
     }
+  },
+
+  /**
+   * Cancela la aportación pendiente y su campana al cambiar la programación.
+   * Las aportaciones ya aceptadas no se tocan: siguen siendo histórico válido.
+   */
+  async cancelPendingReminder(userId: string, goalId: string) {
+    return prisma.$transaction(async (tx) => {
+      const pending = await tx.goalContribution.findMany({
+        where: { userId, goalId, status: 'pending' },
+        select: { period: true },
+      })
+
+      await tx.notification.deleteMany({
+        where: {
+          userId,
+          key: { in: pending.map((row) => `goal_contribution:${goalId}:${row.period}`) },
+        },
+      })
+
+      return tx.goalContribution.deleteMany({
+        where: { userId, goalId, status: 'pending' },
+      })
+    })
   },
 }

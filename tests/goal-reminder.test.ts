@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { config } from '../src/config/env'
+
 vi.mock('../src/modules/notifications/notifications.repository', () => ({
   NotificationRepository: {
     findRules: vi.fn(),
@@ -22,7 +24,7 @@ import { NotificationService } from '../src/modules/notifications/notifications.
 
 const repo = vi.mocked(NotificationRepository)
 const NOW = new Date('2026-11-18T12:00:00.000Z')
-const PERIOD = '2026-11'
+const PERIOD = 'M:2026-11'
 
 const baseRules = [
   {
@@ -154,7 +156,7 @@ describe('avisos de metas unificados', () => {
   }
 
   it('genera el aviso in-app solo para las metas cuyo día coincide con hoy', async () => {
-    const notifications = await NotificationService.collectNotifications('u1', enabledRules, NOW)
+    const notifications = await NotificationService.collectNotifications('u1', enabledRules, NOW, 'user')
 
     expect(repo.findGoalsWithReminder).toHaveBeenCalledWith('u1')
     expect(notifications).toHaveLength(1)
@@ -165,9 +167,17 @@ describe('avisos de metas unificados', () => {
       body: 'Tienes una aportación pendiente. Confírmala desde aquí.',
       email: {
         template: 'goal_contribution_accept',
-        data: { goalName: 'Viaje a Japón', period: PERIOD },
+        data: expect.objectContaining({
+          recipientName: 'user',
+          goalName: 'Viaje a Japón',
+          saved: 250,
+          targetAmount: 1000,
+          suggestedAmount: 100,
+          manageUrl: `${config.frontendUrl.replace(/\/$/, '')}/preferences`,
+        }),
       },
     })
+    expect(notifications[0].email?.data).not.toHaveProperty('period')
     expect(notifications[0].body).not.toContain('100,00')
     expect(notifications[0].email?.data).not.toHaveProperty('amount')
     expect(String(notifications[0].email?.data.acceptUrl)).toMatch(/\/goals\/aceptar\?token=/)
@@ -179,19 +189,20 @@ describe('avisos de metas unificados', () => {
     const notifications = await NotificationService.collectNotifications(
       'u1',
       { ...enabledRules, goalReminder: { enabled: false, emailEnabled: true } },
-      NOW
+      NOW,
+      'user'
     )
 
     expect(notifications).toEqual([])
     expect(repo.findGoalsWithReminder).not.toHaveBeenCalled()
   })
 
-  it('el correo sigue sin importe aunque la meta tenga sugerencia', async () => {
-    const notifications = await NotificationService.collectNotifications('u1', enabledRules, NOW)
+  it('el correo entrega la sugerencia como importe opcional, no como importe cerrado', async () => {
+    const notifications = await NotificationService.collectNotifications('u1', enabledRules, NOW, 'user')
 
-    expect(notifications[0].email?.data).not.toHaveProperty('suggestedAmount')
-    expect(notifications[0].email?.data).not.toHaveProperty('saved')
-    expect(notifications[0].email?.data).not.toHaveProperty('target')
+    expect(notifications[0].email?.data).not.toHaveProperty('amount')
+    expect(notifications[0].email?.data.suggestedAmount).toBe(100)
+    expect(notifications[0].email?.data.saved).toBe(250)
   })
 
   it('envía el correo solo si goalReminder.emailEnabled', async () => {

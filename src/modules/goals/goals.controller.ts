@@ -17,15 +17,36 @@ export const GoalController = {
   async create(req: Request, res: Response) {
     requireFields(req.body, 'name', 'targetAmount')
 
-    const { name, targetAmount, targetDate, accountId, reminderDay, reminderAmount, reminderEnabled } =
-      req.body
+    const {
+      name,
+      targetAmount,
+      targetDate,
+      accountId,
+      reminderFrequency,
+      reminderChannel,
+      reminderWeekday,
+      reminderDay,
+      reminderLastDay,
+      reminderInterval,
+      reminderIntervalUnit,
+      reminderStartDate,
+      reminderAmount,
+      reminderEnabled,
+    } = req.body
 
     const goal = await GoalService.create(req.userId, {
       name,
       targetAmount,
       targetDate,
       accountId,
+      reminderFrequency,
+      reminderChannel,
+      reminderWeekday,
       reminderDay,
+      reminderLastDay,
+      reminderInterval,
+      reminderIntervalUnit,
+      reminderStartDate,
       reminderAmount,
       reminderEnabled,
     })
@@ -34,8 +55,23 @@ export const GoalController = {
   },
 
   async update(req: Request, res: Response) {
-    const { name, targetAmount, targetDate, accountId, isArchived, reminderDay, reminderAmount, reminderEnabled } =
-      req.body
+    const {
+      name,
+      targetAmount,
+      targetDate,
+      accountId,
+      isArchived,
+      reminderFrequency,
+      reminderChannel,
+      reminderWeekday,
+      reminderDay,
+      reminderLastDay,
+      reminderInterval,
+      reminderIntervalUnit,
+      reminderStartDate,
+      reminderAmount,
+      reminderEnabled,
+    } = req.body
 
     const goal = await GoalService.update(req.userId, req.params.id as string, {
       name,
@@ -43,7 +79,14 @@ export const GoalController = {
       targetDate,
       accountId,
       isArchived,
+      reminderFrequency,
+      reminderChannel,
+      reminderWeekday,
       reminderDay,
+      reminderLastDay,
+      reminderInterval,
+      reminderIntervalUnit,
+      reminderStartDate,
       reminderAmount,
       reminderEnabled,
     })
