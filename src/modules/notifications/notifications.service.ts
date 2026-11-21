@@ -81,6 +81,39 @@ function periodFor(frequency: SummaryFrequency, now: Date) {
   return { start, end, label: 'esta semana', key: start.toISOString().slice(0, 10) }
 }
 
+/** Variación porcentual redondeada; null cuando no hay base comparable. */
+function trendFor(current: number, previous: number): number | null {
+  if (previous <= 0) return null
+  return Math.round(((current - previous) / previous) * 100)
+}
+
+function monthLong(date: Date): string {
+  return new Intl.DateTimeFormat('es-ES', { month: 'long', timeZone: 'UTC' }).format(date)
+}
+
+/** Etiqueta legible para el correo: «16–22 de noviembre» o «noviembre 2026». */
+function displayPeriodFor(frequency: SummaryFrequency, start: Date, end: Date): string {
+  if (frequency === 'monthly') {
+    return new Intl.DateTimeFormat('es-ES', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(start)
+  }
+  const last = new Date(end.getTime() - 24 * 60 * 60 * 1000)
+  const sameMonth =
+    start.getUTCMonth() === last.getUTCMonth() && start.getUTCFullYear() === last.getUTCFullYear()
+  if (!sameMonth) {
+    const long = new Intl.DateTimeFormat('es-ES', {
+      day: 'numeric',
+      month: 'long',
+      timeZone: 'UTC',
+    })
+    return `${long.format(start)}–${long.format(last)}`
+  }
+  return `${start.getUTCDate()}–${last.getUTCDate()} de ${monthLong(start)}`
+}
+
 export interface ProcessResult {
   processed: number
   emailsSent: number
@@ -239,19 +272,36 @@ export const NotificationService = {
 
     if (rules.spendingSummary.enabled) {
       const { start, end, label, key } = periodFor(rules.spendingSummary.frequency, now)
-      const spending = await NotificationRepository.sumExpenses(userId, start, end)
+      const spending = await NotificationRepository.summaryForPeriod(userId, start, end)
       if (spending.count > 0) {
+        const length = end.getTime() - start.getTime()
+        const previousStart = new Date(start.getTime() - length)
+        const previous = await NotificationRepository.summaryForPeriod(userId, previousStart, start)
+        const month = start.getUTCMonth() + 1
+        const year = start.getUTCFullYear()
+        const budget = await NotificationRepository.monthlyBudgetTotal(userId, month, year)
+        const frontendBase = config.frontendUrl.replace(/\/$/, '')
+
         notifications.push({
           key: `summary:${rules.spendingSummary.frequency}:${key}`,
           type: 'spending_summary',
           title: 'Resumen de gastos',
-          body: `Has gastado ${money.format(spending.total)} ${label} en ${spending.count} ${spending.count === 1 ? 'movimiento' : 'movimientos'}.`,
+          body: `Has gastado ${money.format(spending.spent)} ${label} en ${spending.count} ${spending.count === 1 ? 'movimiento' : 'movimientos'}.`,
           email: {
             template: 'spending_summary',
             data: {
               recipientName,
-              period: label,
-              total: spending.total,
+              period: displayPeriodFor(rules.spendingSummary.frequency, start, end),
+              frequency: rules.spendingSummary.frequency,
+              budgetMonth: monthLong(start),
+              total: spending.spent,
+              spentTrend: trendFor(spending.spent, previous.spent),
+              income: spending.income,
+              incomeTrend: trendFor(spending.income, previous.income),
+              categories: spending.categories,
+              budget,
+              dashboardUrl: `${frontendBase}/`,
+              manageUrl: `${frontendBase}/preferences`,
               unsubscribeUrl: createUnsubscribeUrl(userId),
             },
           },

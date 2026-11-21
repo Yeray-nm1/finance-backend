@@ -193,6 +193,66 @@ export const NotificationRepository = {
     }
   },
 
+  /**
+   * Datos del resumen en una sola lectura: gasto, ingresos y las tres categorías
+   * con más peso. Las transacciones sin categoría se agrupan como «Sin categoría».
+   */
+  async summaryForPeriod(userId: string, start: Date, end: Date) {
+    const rows = await prisma.transaction.findMany({
+      where: { userId, type: { in: ['expense', 'income'] }, date: { gte: start, lt: end } },
+      select: { amount: true, type: true, categoryId: true },
+    })
+
+    let spent = 0
+    let income = 0
+    let count = 0
+    const byCategory = new Map<string, number>()
+    for (const row of rows) {
+      const amount = Math.abs(row.amount)
+      if (row.type === 'income') {
+        income += amount
+        continue
+      }
+      spent += amount
+      count += 1
+      const key = row.categoryId ?? 'uncategorized'
+      byCategory.set(key, (byCategory.get(key) ?? 0) + amount)
+    }
+
+    const ids = [...byCategory.keys()].filter((key) => key !== 'uncategorized')
+    const found = ids.length
+      ? await prisma.category.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, name: true },
+        })
+      : []
+    const names = new Map(found.map((category) => [category.id, category.name]))
+
+    const categories = [...byCategory.entries()]
+      .map(([key, amount]) => ({
+        name: key === 'uncategorized' ? 'Sin categoría' : names.get(key) ?? 'Sin categoría',
+        amount: Math.round(amount * 100) / 100,
+      }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 3)
+
+    return {
+      spent: Math.round(spent * 100) / 100,
+      income: Math.round(income * 100) / 100,
+      count,
+      categories,
+    }
+  },
+
+  /** Presupuesto del mes: la base de ingresos con la que se calculan las allocaciones. */
+  async monthlyBudgetTotal(userId: string, month: number, year: number) {
+    const monthly = await prisma.monthlyBudget.findUnique({
+      where: { userId_month_year: { userId, month, year } },
+      select: { totalIncome: true },
+    })
+    return monthly?.totalIncome ?? null
+  },
+
   /** Metas activas con recordatorio configurado, con el total ya aportado. */
   async findGoalsWithReminder(userId: string) {
     const goals = await prisma.savingsGoal.findMany({

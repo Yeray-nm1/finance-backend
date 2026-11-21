@@ -8,6 +8,8 @@ vi.mock('../src/modules/notifications/notifications.repository', () => ({
     findActiveSubscriptions: vi.fn(),
     findLastCharge: vi.fn(),
     sumExpenses: vi.fn(),
+    summaryForPeriod: vi.fn(),
+    monthlyBudgetTotal: vi.fn(),
     createNotifications: vi.fn(),
     findPendingEmailKeys: vi.fn(),
     markEmailsSent: vi.fn(),
@@ -59,6 +61,13 @@ beforeEach(() => {
   ] as never)
   repo.findLastCharge.mockResolvedValue(new Date('2026-11-10T00:00:00.000Z') as never)
   repo.sumExpenses.mockResolvedValue({ total: 42.5, count: 3 } as never)
+  repo.summaryForPeriod.mockResolvedValue({
+    spent: 42.5,
+    count: 3,
+    income: 0,
+    categories: [],
+  } as never)
+  repo.monthlyBudgetTotal.mockResolvedValue(null as never)
   repo.createNotifications.mockImplementation(async (_userId, items) => items as never)
   repo.findPendingEmailKeys.mockResolvedValue(
     new Set(['subscription_due:s1:2026-11-17', 'summary:weekly:2026-11-16']) as never
